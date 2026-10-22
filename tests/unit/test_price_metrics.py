@@ -54,7 +54,7 @@ def test_ok_snapshot_with_changes() -> None:
 def test_no_bars_is_insufficient_data_not_zero() -> None:
     snap = compute_snapshot(
         INSTRUMENT,
-        PriceSeriesResult([], "SPY", error="provider returned no rows"),
+        PriceSeriesResult([], "SPY", error="dostawca nie zwrócił danych"),
         provider="test",
         fetched_at=NOW,
         as_of=AS_OF,
@@ -63,7 +63,7 @@ def test_no_bars_is_insufficient_data_not_zero() -> None:
     assert snap.status is DataStatus.INSUFFICIENT_DATA
     assert snap.last_close is None
     assert snap.change_1w_pct is None
-    assert "provider returned no rows" in snap.issues
+    assert "dostawca nie zwrócił danych" in snap.issues
 
 
 def test_stale_series_is_flagged() -> None:
@@ -77,7 +77,7 @@ def test_stale_series_is_flagged() -> None:
         stale_after_business_days=5,
     )
     assert snap.status is DataStatus.STALE
-    assert any("business days old" in i for i in snap.issues)
+    assert any("dni roboczych" in i for i in snap.issues)
 
 
 def test_short_history_has_no_month_change() -> None:
@@ -92,7 +92,7 @@ def test_short_history_has_no_month_change() -> None:
     )
     assert snap.change_1w_pct is not None
     assert snap.change_1m_pct is None
-    assert "not enough history for 1M change" in snap.issues
+    assert "za krótka historia do wyliczenia zmiany miesięcznej" in snap.issues
 
 
 def test_all_closes_missing_is_insufficient() -> None:
@@ -106,7 +106,7 @@ def test_all_closes_missing_is_insufficient() -> None:
         stale_after_business_days=5,
     )
     assert snap.status is DataStatus.INSUFFICIENT_DATA
-    assert snap.issues == ["no valid closing prices"]
+    assert snap.issues == ["brak prawidłowych cen zamknięcia"]
 
 
 def test_raw_close_used_when_adjusted_missing() -> None:

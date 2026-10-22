@@ -83,7 +83,7 @@ class Settings(BaseSettings):
 
 
 class _InstrumentsFile(BaseModel):
-    instruments: list[Instrument]
+    instruments: list[Instrument] = Field(min_length=1)
 
 
 class _SourcesFile(BaseModel):

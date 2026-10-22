@@ -68,7 +68,7 @@ def test_provider_error_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
         INSTRUMENT, date(2026, 10, 1), date(2026, 10, 16), NOW
     )
     assert result.bars == []
-    assert result.error is not None and "RuntimeError" in result.error
+    assert result.error is not None and result.error == "błąd dostawcy: RuntimeError"
 
 
 def test_empty_frame_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -76,7 +76,7 @@ def test_empty_frame_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     result = YFinancePriceProvider().get_daily_history(
         INSTRUMENT, date(2026, 10, 1), date(2026, 10, 16), NOW
     )
-    assert result.error == "provider returned no rows"
+    assert result.error == "dostawca nie zwrócił danych"
 
 
 def test_missing_symbol_for_provider() -> None:
@@ -84,4 +84,4 @@ def test_missing_symbol_for_provider() -> None:
     result = YFinancePriceProvider().get_daily_history(
         instrument, date(2026, 10, 1), date(2026, 10, 16), NOW
     )
-    assert result.error == "no yfinance symbol configured"
+    assert result.error == "brak symbolu yfinance w konfiguracji"

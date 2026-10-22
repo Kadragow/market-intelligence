@@ -46,7 +46,7 @@ class RssNewsProvider:
                 response = self._client.get(source.url)
                 response.raise_for_status()
             except httpx.TimeoutException:
-                result.errors[source.id] = "timeout"
+                result.errors[source.id] = "przekroczony czas oczekiwania"
                 logger.warning("RSS timeout for source %s", source.id)
                 continue
             except httpx.HTTPStatusError as exc:
@@ -54,13 +54,13 @@ class RssNewsProvider:
                 logger.warning("RSS HTTP %s for source %s", exc.response.status_code, source.id)
                 continue
             except httpx.HTTPError as exc:
-                result.errors[source.id] = type(exc).__name__
+                result.errors[source.id] = f"błąd połączenia: {type(exc).__name__}"
                 logger.warning("RSS error for source %s: %s", source.id, type(exc).__name__)
                 continue
 
             items = parse_feed(response.content, source, fetched_at)
             if not items:
-                result.errors[source.id] = "feed contained no usable entries"
+                result.errors[source.id] = "kanał nie zawierał poprawnych wpisów"
             result.items.extend(items[: self._max_items])
         return result
 

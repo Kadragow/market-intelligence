@@ -36,7 +36,7 @@ class YFinancePriceProvider:
     ) -> PriceSeriesResult:
         symbol = instrument.symbol_for(self.name)
         if symbol is None:
-            return PriceSeriesResult([], None, error="no yfinance symbol configured")
+            return PriceSeriesResult([], None, error="brak symbolu yfinance w konfiguracji")
 
         import yfinance as yf  # imported lazily: slow import, unused in --mock
 
@@ -53,10 +53,10 @@ class YFinancePriceProvider:
             )
         except Exception as exc:  # yfinance raises a variety of exception types
             logger.warning("yfinance error for %s: %s", symbol, type(exc).__name__)
-            return PriceSeriesResult([], symbol, error=f"{type(exc).__name__}: {exc}")
+            return PriceSeriesResult([], symbol, error=f"błąd dostawcy: {type(exc).__name__}")
 
         if frame is None or frame.empty:
-            return PriceSeriesResult([], symbol, error="provider returned no rows")
+            return PriceSeriesResult([], symbol, error="dostawca nie zwrócił danych")
 
         bars = [_row_to_bar(instrument.id, index, row) for index, row in frame.iterrows()]
         return PriceSeriesResult(bars, symbol)

@@ -64,7 +64,7 @@ def compute_snapshot(
     }
     if not valid:
         if not issues:
-            issues.append("no valid closing prices")
+            issues.append("brak prawidłowych cen zamknięcia")
         return InstrumentSnapshot(status=DataStatus.INSUFFICIENT_DATA, issues=issues, **common)
 
     last = valid[-1]
@@ -73,14 +73,14 @@ def compute_snapshot(
     status = DataStatus.OK
     if lag > stale_after_business_days:
         status = DataStatus.STALE
-        issues.append(f"last observation is {lag} business days old")
+        issues.append(f"ostatnia obserwacja sprzed {lag} dni roboczych")
 
     week_ref = _reference_bar(valid, last_date - timedelta(days=7))
     month_ref = _reference_bar(valid, last_date - timedelta(days=30))
     week_change, week_basis = _pct_change(week_ref, last)
     month_change, month_basis = _pct_change(month_ref, last)
     if month_ref is None:
-        issues.append("not enough history for 1M change")
+        issues.append("za krótka historia do wyliczenia zmiany miesięcznej")
 
     return InstrumentSnapshot(
         status=status,

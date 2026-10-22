@@ -58,7 +58,7 @@ def test_clean_number_allows_non_positive_when_requested() -> None:
 def test_clean_bars_dedupes_and_sorts() -> None:
     bars, warnings = clean_bars([_bar(2, 11.0), _bar(1, 10.0), _bar(2, 12.0)], AssetClass.ETF)
     assert [b.close for b in bars] == [10.0, 12.0]
-    assert any("duplicate" in w for w in warnings)
+    assert any("zduplikowana" in w for w in warnings)
 
 
 def test_clean_bars_invalid_close_becomes_missing() -> None:
@@ -151,7 +151,7 @@ def test_rss_provider_timeout_is_recorded() -> None:
 
     result = _rss_provider(httpx.MockTransport(handler)).fetch([SOURCE], NOW)
     assert result.items == []
-    assert result.errors == {"s1": "timeout"}
+    assert result.errors == {"s1": "przekroczony czas oczekiwania"}
 
 
 def test_rss_provider_rate_limit_is_recorded() -> None:

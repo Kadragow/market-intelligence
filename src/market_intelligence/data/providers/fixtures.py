@@ -26,7 +26,7 @@ class FixturePriceProvider:
         symbol = instrument.symbol_for("yfinance")
         path = self._directory / f"{instrument.id}.csv"
         if not path.is_file():
-            return PriceSeriesResult([], symbol, error="no fixture data for instrument")
+            return PriceSeriesResult([], symbol, error="brak danych testowych dla instrumentu")
 
         bars: list[PriceBar] = []
         with path.open(encoding="utf-8", newline="") as fh:
@@ -42,7 +42,7 @@ class FixturePriceProvider:
                     )
                 )
         if not bars:
-            return PriceSeriesResult([], symbol, error="no fixture rows in requested range")
+            return PriceSeriesResult([], symbol, error="brak danych testowych w zadanym okresie")
         return PriceSeriesResult(bars, symbol)
 
 
@@ -63,7 +63,7 @@ class FixtureNewsProvider:
         for source in sources:
             path = self._directory / f"{source.id}.xml"
             if not path.is_file():
-                result.errors[source.id] = "no fixture feed for source"
+                result.errors[source.id] = "brak testowego kanału dla źródła"
                 continue
             items = parse_feed(path.read_bytes(), source, fetched_at)
             result.items.extend(items[: self._max_items])

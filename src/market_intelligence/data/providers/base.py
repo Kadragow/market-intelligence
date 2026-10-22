@@ -73,7 +73,7 @@ def clean_bars(bars: list[PriceBar], asset_class: AssetClass) -> tuple[list[Pric
     by_time: dict[datetime, PriceBar] = {}
     for bar in bars:
         if bar.observed_at in by_time:
-            warnings.append(f"duplicate bar at {bar.observed_at.date().isoformat()} dropped")
+            warnings.append(f"zduplikowana świeca z {bar.observed_at.date().isoformat()} usunięta")
         by_time[bar.observed_at] = bar
 
     # Yields may legitimately be zero or negative; prices may not.
@@ -89,7 +89,9 @@ def clean_bars(bars: list[PriceBar], asset_class: AssetClass) -> tuple[list[Pric
             | {"volume": _clean_volume(bar.volume, asset_class)}
         )
         if fixed.close is None and bar.close is not None:
-            warnings.append(f"invalid close at {observed_at.date().isoformat()} set to missing")
+            warnings.append(
+                f"nieprawidłowe zamknięcie z {observed_at.date().isoformat()} oznaczone jako brak"
+            )
         cleaned.append(fixed)
     return cleaned, warnings
 
