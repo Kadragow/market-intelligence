@@ -35,7 +35,6 @@ class DataStatus(StrEnum):
     OK = "ok"
     STALE = "stale"
     INSUFFICIENT_DATA = "insufficient_data"
-    ERROR = "error"
 
 
 class Instrument(BaseModel):
