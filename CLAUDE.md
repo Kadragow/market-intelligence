@@ -26,6 +26,8 @@ and my approval.
 - Full check before ending a stage: all four above
 - Weekly report, offline (mocks, no API keys, no e-mail): `uv run mi weekly --mock --dry-run`
 - Weekly report, real data, no e-mail: `uv run mi weekly --dry-run`
+- Weekly report with e-mail (also needs `MI_EMAIL_ENABLED=true` + full SMTP): `uv run mi weekly --send`
+- Regenerate golden report files: `UPDATE_GOLDEN=1 uv run pytest tests/integration`
 
 If a command above does not exist yet, create it in the stage that needs it and
 keep this section accurate.
@@ -43,6 +45,8 @@ src/market_intelligence/
   delivery/            e-mail
   storage/             repository interfaces + implementations
   backtesting/         engine, metrics (Stage 6)
+  mock_data/           synthetic prices/RSS used by `--mock`
+  pipeline.py          weekly run: fetch -> compute -> LLM draft -> validate -> render -> send
   cli.py               entry point `mi`
 config/                instruments.yaml, sources.yaml, scoring.yaml
 tests/unit, tests/integration, tests/fixtures
