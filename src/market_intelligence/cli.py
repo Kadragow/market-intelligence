@@ -10,6 +10,7 @@ import typer
 from market_intelligence.config import ConfigError, Settings
 from market_intelligence.pipeline import run_weekly
 
+# DECISION: CLI built with typer (small dependency, typed options, built-in help).
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
 EXIT_REPORT_FAILED = 1

@@ -1,4 +1,8 @@
-"""SYNTHETIC data for `mi weekly --mock`. Not real market data or news."""
+"""SYNTHETIC data for `mi weekly --mock`. Not real market data or news.
+
+DECISION: shipped inside the package (not tests/fixtures) so that --mock does not depend
+on the test tree. Every price series starts at 100 to make it obviously synthetic.
+"""
 
 from pathlib import Path
 

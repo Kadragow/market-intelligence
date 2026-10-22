@@ -49,7 +49,9 @@ class Settings(BaseSettings):
     # (checked 2026-10-22). Update them when changing the model.
     llm_input_usd_per_mtok: float = Field(default=2.0, gt=0)
     llm_output_usd_per_mtok: float = Field(default=10.0, gt=0)
-    # Server-side refusal fallback ("fallbacks": "default", beta header below).
+    # DECISION: server-side refusal fallback ("fallbacks": "default", beta) is on by
+    # default, as Anthropic recommends for this model. Set MI_LLM_REFUSAL_FALLBACK=false
+    # to disable it.
     llm_refusal_fallback: bool = True
 
     # --- E-mail ---

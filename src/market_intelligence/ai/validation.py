@@ -107,7 +107,9 @@ class NumberContext:
     def _matches(self, token: str) -> bool:
         value = abs(_to_float(token))
         decimals = len(token.replace(",", ".").partition(".")[2])
-        # Accept a value rounded to the number of decimals written.
+        # DECISION: a number written with d decimals matches an input value within
+        # half a unit of the d-th decimal (i.e. a correct rounding). Signs are ignored
+        # because the text may say "spadek o 0,45%" for -0.45.
         tolerance = 0.5 * 10**-decimals + 1e-9
         return any(abs(value - known) <= tolerance for known in self.numbers)
 

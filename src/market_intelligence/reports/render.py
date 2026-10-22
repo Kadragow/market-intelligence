@@ -1,7 +1,8 @@
 """Render the weekly report (Markdown + HTML, UTF-8) and save it to disk.
 
-Tables, sources and timestamps are rendered by code from the data. The model's
-draft supplies only the commentary.
+DECISION: tables, sources and timestamps are rendered by code from the data. The
+model's draft supplies only the commentary, so no number in a table comes from the LLM.
+HTML uses its own template (not Markdown conversion) for control over e-mail layout.
 """
 
 from __future__ import annotations
