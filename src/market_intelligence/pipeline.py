@@ -8,6 +8,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from pydantic import SecretStr
+
 from market_intelligence.ai.client import FakeLLMClient, LLMClient
 from market_intelligence.ai.mock_writer import mock_draft
 from market_intelligence.ai.schema import ReportInput
@@ -80,6 +82,8 @@ def run_weekly(
     sources = load_sources(MOCK_SOURCES_FILE if mock else settings.config_dir / "sources.yaml")
     prices = price_provider or _default_price_provider(settings, mock)
     news_src = news_provider or _default_news_provider(settings, mock)
+    if not mock and llm is None:
+        _require_api_key(settings)  # fail before spending time on data fetching
 
     start = (now - timedelta(days=settings.price_history_days)).date()
     snapshots: list[InstrumentSnapshot] = []
@@ -223,13 +227,11 @@ def _default_llm(settings: Settings, mock: bool, report_input: ReportInput) -> L
     if mock:
         draft_json = mock_draft(report_input).model_dump_json()
         return FakeLLMClient(lambda system, user: draft_json, model="mock")
-    if settings.anthropic_api_key is None or not settings.anthropic_api_key.get_secret_value():
-        # DECISION: never fall back to the fake silently outside --mock.
-        raise ConfigError("ANTHROPIC_API_KEY is not set. Use --mock to run without the Claude API.")
+    api_key = _require_api_key(settings)
     from market_intelligence.ai.anthropic_client import AnthropicLLMClient
 
     return AnthropicLLMClient(
-        api_key=settings.anthropic_api_key,
+        api_key=api_key,
         model=settings.llm_model,
         max_tokens=settings.llm_max_tokens,
         max_cost_usd=settings.llm_max_cost_usd,
@@ -238,3 +240,11 @@ def _default_llm(settings: Settings, mock: bool, report_input: ReportInput) -> L
         timeout_seconds=settings.llm_timeout_seconds,
         refusal_fallback=settings.llm_refusal_fallback,
     )
+
+
+def _require_api_key(settings: Settings) -> SecretStr:
+    key = settings.anthropic_api_key
+    if key is None or not key.get_secret_value():
+        # DECISION: never fall back to the fake model silently outside --mock.
+        raise ConfigError("ANTHROPIC_API_KEY is not set. Use --mock to run without the Claude API.")
+    return key

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
 from market_intelligence.ai.schema import Claim, ReportDraft
 from market_intelligence.ai.writer import price_decimals
@@ -22,7 +22,10 @@ DISCLAIMER = (
     "Materiał ma charakter badawczy i informacyjny. Nie stanowi rekomendacji "
     "inwestycyjnej ani porady finansowej. Wyniki historyczne nie gwarantują przyszłych."
 )
-MOCK_BANNER = "DANE TESTOWE — raport wygenerowany w trybie --mock z syntetycznych danych. Nie są to prawdziwe notowania ani wiadomości."
+MOCK_BANNER = (
+    "DANE TESTOWE — raport wygenerowany w trybie --mock z syntetycznych danych. "
+    "Nie są to prawdziwe notowania ani wiadomości."
+)
 
 STATUS_LABELS = {
     DataStatus.OK: "OK",
@@ -94,15 +97,14 @@ def md_escape(text: str) -> str:
 def _environment() -> Environment:
     env = Environment(
         loader=FileSystemLoader(_TEMPLATES),
-        autoescape=lambda name: bool(name and name.endswith(".html.j2")),
+        # HTML templates are escaped; Markdown output is escaped with the `md` filter.
+        autoescape=select_autoescape(enabled_extensions=("html.j2",), default_for_string=False),
         undefined=StrictUndefined,
         trim_blocks=True,
         lstrip_blocks=True,
         keep_trailing_newline=True,
     )
-    env.filters.update(
-        num=fmt_num, pct=fmt_pct, dt=fmt_dt, date=fmt_date, md=md_escape
-    )
+    env.filters.update(num=fmt_num, pct=fmt_pct, dt=fmt_dt, date=fmt_date, md=md_escape)
     return env
 
 
