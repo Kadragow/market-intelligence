@@ -63,10 +63,10 @@ class YFinancePriceProvider:
 
 
 def _row_to_bar(instrument_id: str, index: Any, row: Any) -> PriceBar:
-    timestamp = index.to_pydatetime()
-    if timestamp.tzinfo is None:
-        # DECISION: yfinance daily bars normally carry the exchange timezone; if not,
-        # treat the session date as UTC midnight.
-        timestamp = timestamp.replace(tzinfo=UTC)
+    # DECISION: daily bars are stamped at local midnight of the exchange timezone.
+    # Converting that instant to UTC can shift the date (e.g. London, Tokyo), so we keep
+    # the session date and store it as 00:00 UTC.
+    session_date = index.to_pydatetime().date()
+    observed_at = datetime(session_date.year, session_date.month, session_date.day, tzinfo=UTC)
     values = {field: row.get(column) for field, column in _COLUMNS.items()}
-    return PriceBar(instrument_id=instrument_id, observed_at=timestamp, **values)
+    return PriceBar(instrument_id=instrument_id, observed_at=observed_at, **values)
