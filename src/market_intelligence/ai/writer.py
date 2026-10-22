@@ -77,6 +77,7 @@ def _instrument_input(snap: InstrumentSnapshot) -> InstrumentInput:
             snap.last_observed_at.date().isoformat() if snap.last_observed_at else None
         ),
         notes=instrument.data_notes,
+        data_issues=list(snap.issues),
     )
 
 

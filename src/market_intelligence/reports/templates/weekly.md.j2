@@ -1,0 +1,111 @@
+{% macro refs_md(claim) %}{% for n in cite(claim) %} [{{ n }}]{% endfor %}{% endmacro %}
+{% macro claims(items, empty) %}
+{% if items %}
+{% for c in items %}
+- {{ c.text | md }}{{ refs_md(c) }}
+{% endfor %}
+{% else %}
+_{{ empty }}_
+{% endif %}
+{% endmacro %}
+{% set d = ctx.draft %}
+# Tygodniowy brief rynkowy {{ ctx.report_week }}
+
+{% if ctx.mock %}
+> **{{ mock_banner }}**
+
+{% endif %}
+Stan danych na: {{ ctx.as_of | dt }} · Wygenerowano: {{ ctx.generated_at | dt }} · Model: {{ ctx.model }}
+
+## 1. Podsumowanie najważniejszych wydarzeń
+
+{{ claims(d.summary, "Brak podsumowania.") }}
+## 2. Obraz globalnych rynków
+
+| Instrument | Klasa | Ostatnie zamknięcie | Waluta | Zmiana tyg. | Zmiana mies. | Data obserwacji | Status danych |
+|---|---|---:|---|---:|---:|---|---|
+{% for r in rows %}
+| {{ r.snap.instrument.name | md }} | {{ r.snap.instrument.asset_class.value }} | {{ r.close }} | {{ r.snap.instrument.currency or "—" }} | {{ r.snap.change_1w_pct | pct }} | {{ r.snap.change_1m_pct | pct }} | {{ r.snap.last_observed_at | date }} | {{ r.status }} |
+{% endfor %}
+
+Zmiany liczone na cenach zamknięcia skorygowanych (jeśli dostępne), w walucie notowania; bez przeliczeń walutowych.
+
+{{ claims(d.global_markets, "Brak komentarza do rynków.") }}
+## 3. Najważniejsze wydarzenia makroekonomiczne
+
+{{ claims(d.macro, "Brak danych makroekonomicznych w tym etapie (FRED planowany w Etapie 2).") }}
+## 4. Analiza sektorów i spółek
+
+{{ claims(d.sectors_and_companies, "Brak danych do analizy sektorów i spółek.") }}
+## 5. Kandydaci do dalszego researchu
+
+{% if d.research_candidates %}
+_To nie są rekomendacje. To instrumenty, którym warto się dokładniej przyjrzeć._
+
+{% for c in d.research_candidates %}
+### {{ c.instrument_id | md }} — horyzont {{ c.horizon }}
+
+- **Teza:** {{ c.thesis.text | md }}{{ refs_md(c.thesis) }}
+- **Argumenty przeciw:**
+{% for a in c.counterarguments %}
+  - {{ a.text | md }}{{ refs_md(a) }}
+{% endfor %}
+- **Ryzyka:** {{ c.risks | map("md") | join("; ") }}
+- **Niepewności:** {{ c.uncertainties | map("md") | join("; ") }}
+- **Warunki unieważnienia:** {{ c.invalidation_conditions | map("md") | join("; ") }}
+
+{% endfor %}
+{% else %}
+_Brak kandydatów w tym tygodniu._
+
+{% endif %}
+## 6. Sygnały ostrzegawcze
+
+{{ claims(d.warning_signs, "Brak sygnałów ostrzegawczych z analizy.") }}
+{% if data_issues %}
+**Problemy z danymi (wykryte przez kod):**
+
+{% for name, status, issues in data_issues %}
+- {{ name | md }}: {{ status }}{% if issues %} — {{ issues | md }}{% endif %}
+
+{% endfor %}
+
+{% endif %}
+## 7. Technologie, AI, półprzewodniki i startupy
+
+{{ claims(d.technology, "Brak wiadomości technologicznych.") }}
+## 8. Kalendarz nadchodzących wydarzeń
+
+_Brak danych kalendarza w tym etapie._
+
+## 9. Scenariusze
+
+- **Pozytywny:** {{ d.scenarios.positive.text | md }}{{ refs_md(d.scenarios.positive) }}
+- **Bazowy:** {{ d.scenarios.base.text | md }}{{ refs_md(d.scenarios.base) }}
+- **Negatywny:** {{ d.scenarios.negative.text | md }}{{ refs_md(d.scenarios.negative) }}
+
+## 10. Źródła i timestampy danych
+
+{% for r in refs %}
+{{ r.number }}. {% if r.link %}[{{ r.label | md }}]({{ r.link }}){% else %}{{ r.label | md }}{% endif %} — {{ r.details }}
+{% endfor %}
+{% if ctx.news_errors %}
+
+Nieudane pobrania wiadomości:
+{% for sid, err in ctx.news_errors.items() %}
+- {{ sid | md }}: {{ err | md }}
+{% endfor %}
+{% endif %}
+
+## 11. Ograniczenia i niepewności analizy
+
+{% for item in d.limitations %}
+- {{ item | md }}
+{% endfor %}
+{% for item in ctx.unavailable_data %}
+- Niedostępne w tym etapie: {{ item | md }}
+{% endfor %}
+
+---
+
+_{{ disclaimer }}_

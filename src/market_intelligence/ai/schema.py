@@ -25,6 +25,7 @@ class InstrumentInput(BaseModel):
     monthly_change_pct: float | None
     last_observation_date: str | None
     notes: str | None = None
+    data_issues: list[str] = []
 
 
 class NewsInput(BaseModel):

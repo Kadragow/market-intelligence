@@ -1,0 +1,30 @@
+# [NIEPOWODZENIE] Tygodniowy brief rynkowy {{ ctx.report_week }}
+
+{% if ctx.mock %}
+> **{{ mock_banner }}**
+
+{% endif %}
+Stan danych na: {{ ctx.as_of | dt }} · Wygenerowano: {{ ctx.generated_at | dt }} · Model: {{ ctx.model }}
+
+Raport **nie został wygenerowany jako kompletny**. Odpowiedź modelu była niedostępna
+albo nie przeszła walidacji, więc nie jest publikowana.
+
+## Błędy
+
+{% for e in ctx.errors %}
+- {{ e | md }}
+{% endfor %}
+
+## Stan pobranych danych
+
+| Instrument | Status danych | Data obserwacji |
+|---|---|---|
+{% for r in rows %}
+| {{ r.snap.instrument.name | md }} | {{ r.status }} | {{ r.snap.last_observed_at | date }} |
+{% endfor %}
+
+Pobrane wiadomości: {{ ctx.news | length }}{% if ctx.news_errors %}; nieudane źródła: {{ ctx.news_errors | length }}{% endif %}.
+
+---
+
+_{{ disclaimer }}_
