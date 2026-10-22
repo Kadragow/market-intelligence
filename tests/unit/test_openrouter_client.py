@@ -208,3 +208,31 @@ def test_non_json_error_body() -> None:
     )
     with pytest.raises(LLMError, match="HTTP 502"):
         _generate(client)
+
+
+def test_error_details_are_included_and_key_redacted() -> None:
+    body = {
+        "error": {
+            "code": 403,
+            "message": f"Blocked by guardrail for key {API_KEY}",
+            "metadata": {"error_type": "content_policy_violation", "reasons": ["injection"]},
+        }
+    }
+    with pytest.raises(LLMError) as info:
+        _generate(_client(Recorder(status=403, body=body)))
+    text = str(info.value)
+    assert text.startswith("OpenRouter error: HTTP 403 (request blocked")
+    assert "error_type=content_policy_violation" in text
+    assert "reasons=['injection']" in text
+    assert "Blocked by guardrail" in text
+    assert API_KEY not in text and "***" in text
+
+
+def test_long_error_message_is_truncated_to_one_line() -> None:
+    body = {"error": {"code": 400, "message": "line one\nline two " + "x" * 500}}
+    with pytest.raises(LLMError) as info:
+        _generate(_client(Recorder(status=400, body=body)))
+    text = str(info.value)
+    assert "\n" not in text
+    assert text.endswith("…")
+    assert len(text) < 300

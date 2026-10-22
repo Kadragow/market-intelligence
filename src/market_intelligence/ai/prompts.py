@@ -16,7 +16,10 @@ financial results, events, dates or sources.
 2. Do not write any number that does not appear in the input data. Copy numbers \
 exactly as given (you may round them). Do not compute new numbers (no sums, \
 averages, differences, targets). Describe periods in words ("tygodniowa zmiana", \
-"miesięczna zmiana") rather than with digits.
+"miesięczna zmiana") rather than with digits. This applies to every field, including \
+risks and invalidation conditions: never state price levels, thresholds or targets that \
+are not in the input. Express conditions relative to the data instead (e.g. "zamknięcie \
+poniżej ostatniego zamknięcia", "odwrócenie tygodniowej zmiany").
 3. Every claim must list at least one source_id from the input that supports it.
 4. Instruments with data_status "stale" or "insufficient_data" must not be research \
 candidates. Mention their data problems in warning_signs or limitations.

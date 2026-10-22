@@ -88,6 +88,10 @@ class NumberContext:
             found_dates, rest = _extract_dates(text)
             dates.update(found_dates)
             numbers.update(abs(_to_float(m)) for m in _NUMBER_RE.findall(rest))
+        # DECISION: day, month and year of input dates are allowed as plain numbers, so a
+        # date written in words ("22 października 2026") is accepted.
+        for year, month, day in dates:
+            numbers.update((float(year), float(month), float(day)))
         return cls(frozenset(numbers), frozenset(dates))
 
     def extended(self, strings: Iterable[str]) -> NumberContext:

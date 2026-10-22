@@ -102,6 +102,12 @@ def test_dates_must_come_from_input() -> None:
     assert ctx.check("Dane z 2026-10-17.") == ["date 2026-10-17 not in input"]
 
 
+def test_date_written_in_words_is_accepted() -> None:
+    ctx = NumberContext.from_strings(["2026-10-22"])
+    assert ctx.check("Stan na 22 października 2026.") == []
+    assert ctx.check("Stan na 23 października.") == ["number '23' not in input"]
+
+
 # --- draft validation ---------------------------------------------------------
 
 

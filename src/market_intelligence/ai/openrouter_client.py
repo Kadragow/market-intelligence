@@ -37,7 +37,7 @@ _STATUS_MESSAGES = {
     401: "invalid or missing OPENROUTER_API_KEY",
     402: "insufficient credits",
     403: "request blocked (moderation, guardrail or budget limit)",
-    404: "model not found",
+    404: "model not found or no provider can serve the request",
     408: "request timed out",
     429: "rate limited",
     502: "model provider is down or returned an invalid response",
@@ -137,7 +137,9 @@ class OpenRouterLLMClient:
 
         body = _json_body(response)
         if response.status_code != 200 or "error" in body:
-            raise LLMError(_error_message(response.status_code, body))
+            raise LLMError(
+                _error_message(response.status_code, body, self._api_key.get_secret_value())
+            )
         return self._parse_success(body)
 
     def _parse_success(self, body: dict[str, Any]) -> LLMResponse:
@@ -146,7 +148,9 @@ class OpenRouterLLMClient:
             raise LLMError("OpenRouter returned no choices")
         choice = choices[0]
         if choice.get("error"):
-            raise LLMError(_error_message(200, {"error": choice["error"]}))
+            raise LLMError(
+                _error_message(200, {"error": choice["error"]}, self._api_key.get_secret_value())
+            )
         message = choice.get("message") or {}
         finish = choice.get("finish_reason")
         if message.get("refusal") or finish == "content_filter":
@@ -188,14 +192,40 @@ def _json_body(response: httpx.Response) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _error_message(status: int, body: dict[str, Any]) -> str:
+MAX_ERROR_DETAIL_CHARS = 200
+# Structured, short metadata fields documented for 403/402 errors.
+_METADATA_FIELDS = ("error_type", "limit_source", "reasons", "provider_name", "model_slug")
+
+
+def _error_message(status: int, body: dict[str, Any], secret: str = "") -> str:
     raw_error = body.get("error")
     error: dict[str, Any] = raw_error if isinstance(raw_error, dict) else {}
     raw_code = error.get("code")
     code = raw_code if isinstance(raw_code, int) else status
     hint = _STATUS_MESSAGES.get(code, "unexpected error")
-    # The provider's own message is not included: it is untrusted text and may be long.
-    return f"OpenRouter error: HTTP {code} ({hint})"
+    result = f"OpenRouter error: HTTP {code} ({hint})"
+
+    # DECISION: include a short, single-line diagnostic (metadata + truncated message)
+    # so 403/400 causes are visible. It is only logged and shown in the failure report,
+    # never sent to the model; the API key is redacted defensively.
+    details: list[str] = []
+    metadata = error.get("metadata")
+    if isinstance(metadata, dict):
+        for name in _METADATA_FIELDS:
+            value = metadata.get(name)
+            if isinstance(value, str | int | float | list) and value not in ("", []):
+                details.append(f"{name}={value}")
+    message = error.get("message")
+    if isinstance(message, str) and message.strip():
+        details.append(f"message={message.strip()}")
+    if not details:
+        return result
+    detail = " ".join("; ".join(details).split())
+    if secret:
+        detail = detail.replace(secret, "***")
+    if len(detail) > MAX_ERROR_DETAIL_CHARS:
+        detail = detail[: MAX_ERROR_DETAIL_CHARS - 1] + "…"
+    return f"{result}: {detail}"
 
 
 def _strip_code_fence(content: str) -> str:
