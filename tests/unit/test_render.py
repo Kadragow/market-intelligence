@@ -45,7 +45,7 @@ def _ctx(text: str = "Tekst <script>alert(1)</script> | x") -> ReportContext:
         as_of=NOW,
         generated_at=NOW,
         mock=False,
-        model="claude-sonnet-5-5",
+        model="anthropic/claude-sonnet-5.5",
         snapshots=[snap],
         news=[],
         news_errors={},
@@ -85,10 +85,10 @@ def test_complete_report_has_footer_and_no_mock_banner() -> None:
 def test_failure_report() -> None:
     ctx = _ctx()
     ctx.draft = None
-    ctx.errors = ["llm: Claude API error: HTTP 529"]
+    ctx.errors = ["llm: OpenRouter error: HTTP 429 (rate limited)"]
     rendered = render_report(ctx)
     assert rendered.subject.startswith("[NIEPOWODZENIE]")
-    assert "HTTP 529" in rendered.markdown
+    assert "HTTP 429" in rendered.markdown
     assert DISCLAIMER in rendered.html
 
 

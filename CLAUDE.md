@@ -11,7 +11,7 @@ It is a research tool. It never places orders and never promises returns.
 ## Stack
 
 Python 3.12, uv, pandas, NumPy, Pydantic (+ pydantic-settings), httpx,
-Anthropic Python SDK (`anthropic`), SQLAlchemy + Alembic (from Stage 3),
+OpenRouter API over httpx for the LLM, SQLAlchemy + Alembic (from Stage 3),
 pytest, Ruff, mypy (strict on `src/`).
 Do not add Redis, Kafka, Kubernetes or a vector DB without a written justification
 and my approval.
@@ -40,7 +40,7 @@ src/market_intelligence/
   domain/              core models and enums (Instrument, PriceBar, NewsItem, Signal...)
   data/providers/      one adapter per data source, behind shared interfaces
   analysis/            technical, fundamental, macro, news, scoring, risk
-  ai/                  Claude client wrapper, prompts, report writer
+  ai/                  LLM client (OpenRouter), prompts, schema, validation, report writer
   reports/             weekly report assembly, Markdown/HTML rendering, templates
   delivery/            e-mail
   storage/             repository interfaces + implementations
@@ -60,12 +60,13 @@ Do not create empty modules "for later". Create a module when a stage needs it.
 - Code, identifiers, logs and commit messages in English. Report content in Polish.
 - All timestamps are timezone-aware UTC. Keep `published_at`, `observed_at`
   and `fetched_at` separate.
-- Every external service (data providers, Claude API, SMTP) sits behind an
+- Every external service (data providers, LLM API, SMTP) sits behind an
   interface. Tests use fakes/fixtures, never the network.
 - Configuration and weights live in `config/*.yaml` or env, not in code.
-- Claude model name, max tokens and per-run cost limit come from settings.
-  Default model: `claude-sonnet-5-5`. Check current Anthropic docs before
-  integrating, do not rely on memory for SDK details or pricing.
+- The LLM is called through OpenRouter. Model slug, max tokens, max token prices and
+  the per-run cost limit come from settings. Default model: `anthropic/claude-sonnet-5.5`.
+  Check current OpenRouter docs before changing the integration, do not rely on memory
+  for API details or pricing.
 - Branches: `feat/stage-<n>-<topic>`, `fix/<topic>`, `chore/<topic>`.
 - Commits: Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`),
   small and focused.

@@ -14,7 +14,7 @@ Status: `[ ]` do zrobienia, `[~]` w toku, `[x]` gotowe.
 - [x] Pobieranie cen dla listy startowej (yfinance) + fake provider z fixture'ami
 - [x] Pobieranie nagłówków z RSS + fixture'y
 - [x] Minimalne modele domenowe (Instrument, PriceBar, NewsItem)
-- [x] Generowanie raportu przez Claude API za interfejsem `LLMClient` + fake client
+- [x] Generowanie raportu przez LLM za interfejsem `LLMClient` + fake client (od 2026-10-22: OpenRouter zamiast Anthropic SDK)
 - [x] Walidacja odpowiedzi modelu (schemat, źródła, liczby z wejścia)
 - [x] Zapis raportu (Markdown + HTML) do `reports/`
 - [x] Wysyłka SMTP tylko przy kompletnej konfiguracji i wyłączonym `--dry-run`
@@ -22,7 +22,7 @@ Status: `[ ]` do zrobienia, `[~]` w toku, `[x]` gotowe.
 - [x] README: instalacja, konfiguracja, uruchomienie, ograniczenia
 
 Status: ukończony w trybie offline (2026-10-22). Nie przetestowano jeszcze z prawdziwym
-kluczem Anthropic API, prawdziwym SMTP ani na żywych danych yfinance/RSS.
+kluczem OpenRouter, prawdziwym SMTP ani na żywych danych yfinance/RSS.
 
 **Gotowe, gdy:** spełniona definicja MVP z `docs/SPEC.md` §14.
 
@@ -70,7 +70,7 @@ kluczem Anthropic API, prawdziwym SMTP ani na żywych danych yfinance/RSS.
 - [ ] Podać kanały RSS (`config/sources.yaml`)
 - [ ] Potwierdzić harmonogram (domyślnie niedziela 18:00 Europe/Warsaw)
 - [ ] Dane SMTP i adres odbiorcy
-- [ ] Klucz Anthropic API (Claude Console) i miesięczny limit kosztu
+- [ ] Klucz OpenRouter, wybór modelu (płatny lub `:free`) i miesięczny limit kosztu
 - [ ] Dostawca fundamentów przed Etapem 4
 
 ## Notatki
@@ -91,12 +91,21 @@ _(agent dopisuje tu decyzje oznaczone `# DECISION:` i znane ograniczenia po każ
 - Świece yfinance: zachowana data sesji, zapis jako 00:00 UTC (konwersja północy giełdowej
   do UTC przesuwałaby datę).
 - Wolumen 0 dla FX i rentowności traktowany jako brak danych.
-- Ceny tokenów w settings (domyślnie Sonnet 5.5: 2 / 10 USD za 1M, z cennika Anthropic
-  sprawdzonego 2026-10-22); limit kosztu sprawdzany przed wywołaniem jako górny szacunek
-  (`count_tokens` + pełne `max_tokens`).
-- Serwerowy refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`)
-  domyślnie włączony; można wyłączyć `MI_LLM_REFUSAL_FALLBACK=false`.
-- Bez `ANTHROPIC_API_KEY` poza `--mock` program kończy się błędem konfiguracji (bez cichego
+- LLM przez OpenRouter (decyzja operatora 2026-10-22; zastąpiło Anthropic SDK). Wywołanie
+  HTTP przez httpx, bez SDK. `response_format: json_schema` (strict) ze schematu Pydantic,
+  `provider.require_parameters: true`, żeby nie trafić do dostawcy ignorującego schemat
+  (`ai/openrouter_client.py`).
+- Maksymalne ceny tokenów w settings (domyślnie 2 / 10 USD za 1M — stawki Sonnet 5.5
+  u Anthropic) są wysyłane jako `provider.max_price`, więc szacunek kosztu jest górnym
+  ograniczeniem niezależnie od dostawcy. Dla `:free` ustawia się 0 / 0.
+- OpenRouter nie ma endpointu do liczenia tokenów — wejście szacowane jako znaki / 3
+  (zawyża), plus pełne `max_tokens`.
+- Odpowiedź w bloku kodu Markdown (```json) jest rozpakowywana przed walidacją.
+- Błędy OpenRouter mogą przyjść z HTTP 200 w treści — treść jest zawsze sprawdzana.
+  Komunikat błędu dostawcy nie trafia do logów ani raportu (niezaufany tekst).
+- `MI_LLM_DATA_COLLECTION` domyślnie `allow` (domyślne w OpenRouter); `deny` ogranicza do
+  dostawców nieprzechowujących promptów.
+- Bez `OPENROUTER_API_KEY` poza `--mock` program kończy się błędem konfiguracji (bez cichego
   przejścia na fake), sprawdzane przed pobieraniem danych.
 - Brak jakiegokolwiek instrumentu ze statusem `ok` → raport o niepowodzeniu bez wywołania modelu.
 - Wiadomości bez daty publikacji są zachowywane; z datą spoza okna `MI_NEWS_LOOKBACK_DAYS`
@@ -108,11 +117,13 @@ _(agent dopisuje tu decyzje oznaczone `# DECISION:` i znane ograniczenia po każ
 
 ### Etap 1 — znane ograniczenia
 
-- Nie uruchomiono z prawdziwym Claude API, SMTP ani żywymi danymi — tylko testy z fake'ami.
-- Brak retry/backoff dla yfinance i RSS (Etap 2); SDK Anthropic ponawia 429/5xx domyślnie 2×.
+- Nie uruchomiono z prawdziwym OpenRouter, SMTP ani żywymi danymi — tylko testy z fake'ami.
+- Brak retry/backoff dla yfinance, RSS i OpenRouter (Etap 2).
 - Brak kontroli duplikatów wysyłki (Etap 5) — ponowne `--send` wyśle maila ponownie.
 - Walidacja liczb jest heurystyczna; małe liczby całkowite mogą przypadkowo pasować.
-- Koszt przy fallbacku na inny model liczony cennikiem modelu z settings (logowane ostrzeżenie).
+- `usage.cost` z OpenRouter jest w kredytach; dokumentacja nie mówi wprost, że 1 kredyt = 1 USD.
+- Darmowe modele: 20 zapytań/min, 50/dzień (1000/dzień po zakupie ≥ 10 kredytów); nie każdy
+  obsługuje structured outputs; jakość może nie przejść walidacji.
+- Endpoint `/api/v1/models` zwrócił w trakcie sprawdzania inną strukturę niż w dokumentacji
+  (bez cen), dlatego ceny nie są pobierane automatycznie.
 - `config/sources.yaml` pusty — potrzebna lista kanałów RSS od operatora.
-- SDK `anthropic` 2.1.0 (API `2026-10-21`); dokumentacja z której korzystałem opisywała 1.x —
-  sygnatury `messages.parse`, `count_tokens` i `fallbacks` zweryfikowano w zainstalowanym SDK.

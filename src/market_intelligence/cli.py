@@ -27,7 +27,7 @@ def main(verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logg
         stream=sys.stderr,
     )
     # Third-party request logs are noisy and may include full URLs.
-    for name in ("httpx", "httpx2", "anthropic", "yfinance", "peewee"):
+    for name in ("httpx", "yfinance", "peewee"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
 

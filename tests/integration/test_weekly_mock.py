@@ -20,9 +20,9 @@ GOLDEN = ROOT / "tests" / "fixtures" / "golden"
 
 @pytest.fixture
 def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    """Run in an empty directory with no .env and no MI_* / ANTHROPIC_* variables."""
+    """Run in an empty directory with no .env and no MI_* / OPENROUTER_* variables."""
     for key in list(os.environ):
-        if key.startswith(("MI_", "ANTHROPIC_")):
+        if key.startswith(("MI_", "OPENROUTER_")):
             monkeypatch.delenv(key)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("MI_CONFIG_DIR", str(ROOT / "config"))
@@ -192,7 +192,7 @@ def test_no_usable_data_skips_model(isolated_env: Path, tmp_path: Path) -> None:
 
 
 def test_real_mode_without_api_key_fails_clearly(isolated_env: Path) -> None:
-    with pytest.raises(ConfigError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(ConfigError, match="OPENROUTER_API_KEY"):
         run_weekly(
             Settings(),
             mock=False,
@@ -206,7 +206,7 @@ def test_secrets_never_logged_or_written(
     isolated_env: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     _smtp_env(monkeypatch)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-very-secret")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-very-secret")
     caplog.set_level(logging.DEBUG)
     sender = RecordingEmailSender(error=EmailError("SMTP authentication failed (code 535)"))
     result = run_weekly(Settings(), mock=True, dry_run=False, email_sender=sender)
@@ -217,7 +217,7 @@ def test_secrets_never_logged_or_written(
         repr(result),
     ]
     for text in outputs:
-        assert "sk-ant-test-very-secret" not in text
+        assert "sk-or-test-very-secret" not in text
         assert "smtp-super-secret" not in text
 
 

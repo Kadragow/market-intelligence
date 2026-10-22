@@ -1,1 +1,1 @@
-"""Claude integration: client interface, prompts, output schema and validation."""
+"""LLM integration: client interface, prompts, output schema and validation."""

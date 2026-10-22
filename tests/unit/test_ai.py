@@ -1,14 +1,9 @@
 import json
-from types import SimpleNamespace
 from typing import Any
 
-import anthropic
-import httpx2
 import pytest
-from pydantic import SecretStr
 
-from market_intelligence.ai.anthropic_client import REFUSAL_FALLBACK_BETA, AnthropicLLMClient
-from market_intelligence.ai.client import CostLimitExceededError, FakeLLMClient, LLMError
+from market_intelligence.ai.client import FakeLLMClient, LLMError
 from market_intelligence.ai.mock_writer import mock_draft
 from market_intelligence.ai.prompts import SYSTEM_PROMPT, build_user_message
 from market_intelligence.ai.schema import (
@@ -202,115 +197,14 @@ def test_generate_draft_reports_invalid_model_output() -> None:
 
 def test_generate_draft_reports_llm_error() -> None:
     def boom(system: str, user: str) -> str:
-        raise LLMError("Claude API error: HTTP 529")
+        raise LLMError(
+            "OpenRouter error: HTTP 502 (model provider is down or returned an invalid response)"
+        )
 
     result = generate_draft(FakeLLMClient(boom), _input())
-    assert result.errors == ["llm: Claude API error: HTTP 529"]
-
-
-# --- Anthropic client (SDK replaced by a stub, no network) --------------------
-
-
-class _StubSDK:
-    def __init__(
-        self, *, input_tokens: int = 1000, response: Any = None, error: Exception | None = None
-    ):
-        self.parse_kwargs: dict[str, Any] = {}
-
-        def count_tokens(**kwargs: Any) -> Any:
-            return SimpleNamespace(input_tokens=input_tokens)
-
-        def parse(**kwargs: Any) -> Any:
-            self.parse_kwargs = kwargs
-            if error:
-                raise error
-            return response
-
-        self.messages = SimpleNamespace(count_tokens=count_tokens)
-        self.beta = SimpleNamespace(messages=SimpleNamespace(parse=parse))
-
-
-def _client(sdk: _StubSDK, *, max_cost: float = 1.0, fallback: bool = True) -> AnthropicLLMClient:
-    return AnthropicLLMClient(
-        api_key=SecretStr("sk-test"),
-        model="claude-sonnet-5-5",
-        max_tokens=16000,
-        max_cost_usd=max_cost,
-        input_usd_per_mtok=2.0,
-        output_usd_per_mtok=10.0,
-        timeout_seconds=10,
-        refusal_fallback=fallback,
-        client=sdk,  # type: ignore[arg-type]
-    )
-
-
-def _response(stop_reason: str = "end_turn", parsed: Any = "default") -> Any:
-    draft = mock_draft(_input()) if parsed == "default" else parsed
-    return SimpleNamespace(
-        stop_reason=stop_reason,
-        parsed_output=draft,
-        model="claude-sonnet-5-5",
-        usage=SimpleNamespace(input_tokens=1000, output_tokens=2000, iterations=None),
-    )
-
-
-def test_anthropic_client_success_and_cost() -> None:
-    sdk = _StubSDK(response=_response())
-    resp = _client(sdk).generate(system="s", user="u", output_model=ReportDraft)
-    assert ReportDraft.model_validate_json(resp.text)
-    assert resp.cost_usd == pytest.approx(1000 * 2e-6 + 2000 * 10e-6)
-    assert sdk.parse_kwargs["output_format"] is ReportDraft
-    assert sdk.parse_kwargs["betas"] == [REFUSAL_FALLBACK_BETA]
-    assert sdk.parse_kwargs["fallbacks"] == "default"
-    assert "temperature" not in sdk.parse_kwargs
-
-
-def test_anthropic_client_without_fallback_omits_beta() -> None:
-    sdk = _StubSDK(response=_response())
-    _client(sdk, fallback=False).generate(system="s", user="u", output_model=ReportDraft)
-    assert sdk.parse_kwargs["betas"] is anthropic.omit
-    assert sdk.parse_kwargs["fallbacks"] is anthropic.omit
-
-
-def test_cost_limit_blocks_call_before_request() -> None:
-    sdk = _StubSDK(input_tokens=1000, response=_response())
-    # 1000 * 2e-6 + 16000 * 10e-6 = 0.162 USD > 0.10
-    with pytest.raises(CostLimitExceededError):
-        _client(sdk, max_cost=0.10).generate(system="s", user="u", output_model=ReportDraft)
-    assert sdk.parse_kwargs == {}
-
-
-@pytest.mark.parametrize(
-    ("stop_reason", "parsed", "message"),
-    [
-        ("refusal", None, "refused"),
-        ("max_tokens", None, "truncated"),
-        ("end_turn", None, "no structured"),
-    ],
-)
-def test_bad_stop_reasons(stop_reason: str, parsed: Any, message: str) -> None:
-    sdk = _StubSDK(response=_response(stop_reason, parsed))
-    with pytest.raises(LLMError, match=message):
-        _client(sdk).generate(system="s", user="u", output_model=ReportDraft)
-
-
-def test_api_errors_are_wrapped_without_secrets() -> None:
-    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
-    error = anthropic.RateLimitError(
-        "rate limited", response=httpx2.Response(429, request=request), body=None
-    )
-    sdk = _StubSDK(error=error)
-    with pytest.raises(LLMError) as info:
-        _client(sdk).generate(system="s", user="u", output_model=ReportDraft)
-    assert str(info.value) == "Claude API error: HTTP 429"
-    assert "sk-test" not in str(info.value)
-
-
-def test_api_timeout_is_wrapped() -> None:
-    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
-    sdk = _StubSDK(error=anthropic.APITimeoutError(request=request))
-    with pytest.raises(LLMError, match="timeout"):
-        _client(sdk).generate(system="s", user="u", output_model=ReportDraft)
+    assert result.errors == [
+        "llm: OpenRouter error: HTTP 502 (model provider is down or returned an invalid response)"
+    ]
 
 
 def test_scenarios_model_requires_all_three() -> None:

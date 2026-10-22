@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import AliasChoices, BaseModel, Field, SecretStr, ValidationError
@@ -36,23 +36,25 @@ class Settings(BaseSettings):
     news_max_items_for_llm: int = Field(default=40, ge=1)
     http_timeout_seconds: float = Field(default=15.0, gt=0)
 
-    # --- Claude API ---
-    anthropic_api_key: SecretStr | None = Field(
-        default=None, validation_alias=AliasChoices("ANTHROPIC_API_KEY", "MI_ANTHROPIC_API_KEY")
+    # --- LLM via OpenRouter ---
+    openrouter_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OPENROUTER_API_KEY", "MI_OPENROUTER_API_KEY"),
     )
-    llm_model: str = "claude-sonnet-5-5"
+    # OpenRouter model slug; free variants end in ":free".
+    llm_model: str = "anthropic/claude-sonnet-5.5"
     llm_max_tokens: int = Field(default=16000, ge=1024)
     llm_timeout_seconds: float = Field(default=300.0, gt=0)
     llm_max_cost_usd: float = Field(default=0.50, gt=0)
-    # DECISION: prices are configuration, not code. Defaults are the Claude Sonnet 5.5
-    # base rates from https://platform.claude.com/docs/en/about-claude/pricing
-    # (checked 2026-10-22). Update them when changing the model.
-    llm_input_usd_per_mtok: float = Field(default=2.0, gt=0)
-    llm_output_usd_per_mtok: float = Field(default=10.0, gt=0)
-    # DECISION: server-side refusal fallback ("fallbacks": "default", beta) is on by
-    # default, as Anthropic recommends for this model. Set MI_LLM_REFUSAL_FALLBACK=false
-    # to disable it.
-    llm_refusal_fallback: bool = True
+    # DECISION: prices are configuration, not code, and OpenRouter enforces them as
+    # provider.max_price. Defaults are the Anthropic first-party Claude Sonnet 5.5 rates
+    # (USD 2 / 10 per million tokens, checked 2026-10-22); if OpenRouter charges more,
+    # the request is not routed rather than overspending. Use 0 / 0 for ":free" models.
+    llm_input_usd_per_mtok: float = Field(default=2.0, ge=0)
+    llm_output_usd_per_mtok: float = Field(default=10.0, ge=0)
+    # "allow" is OpenRouter's default; "deny" restricts to providers that do not store
+    # prompts (fewer models, free ones may become unavailable).
+    llm_data_collection: Literal["allow", "deny"] = "allow"
 
     # --- E-mail ---
     email_enabled: bool = False

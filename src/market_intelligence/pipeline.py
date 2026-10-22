@@ -228,9 +228,9 @@ def _default_llm(settings: Settings, mock: bool, report_input: ReportInput) -> L
         draft_json = mock_draft(report_input).model_dump_json()
         return FakeLLMClient(lambda system, user: draft_json, model="mock")
     api_key = _require_api_key(settings)
-    from market_intelligence.ai.anthropic_client import AnthropicLLMClient
+    from market_intelligence.ai.openrouter_client import OpenRouterLLMClient
 
-    return AnthropicLLMClient(
+    return OpenRouterLLMClient(
         api_key=api_key,
         model=settings.llm_model,
         max_tokens=settings.llm_max_tokens,
@@ -238,13 +238,13 @@ def _default_llm(settings: Settings, mock: bool, report_input: ReportInput) -> L
         input_usd_per_mtok=settings.llm_input_usd_per_mtok,
         output_usd_per_mtok=settings.llm_output_usd_per_mtok,
         timeout_seconds=settings.llm_timeout_seconds,
-        refusal_fallback=settings.llm_refusal_fallback,
+        data_collection=settings.llm_data_collection,
     )
 
 
 def _require_api_key(settings: Settings) -> SecretStr:
-    key = settings.anthropic_api_key
+    key = settings.openrouter_api_key
     if key is None or not key.get_secret_value():
         # DECISION: never fall back to the fake model silently outside --mock.
-        raise ConfigError("ANTHROPIC_API_KEY is not set. Use --mock to run without the Claude API.")
+        raise ConfigError("OPENROUTER_API_KEY is not set. Use --mock to run without an LLM API.")
     return key

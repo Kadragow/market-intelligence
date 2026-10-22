@@ -68,20 +68,20 @@ def test_missing_config_file(tmp_path: Path) -> None:
 
 def test_settings_defaults_without_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)  # no .env here
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     settings = Settings()
-    assert settings.llm_model == "claude-sonnet-5-5"
-    assert settings.anthropic_api_key is None
+    assert settings.llm_model == "anthropic/claude-sonnet-5.5"
+    assert settings.openrouter_api_key is None
     assert settings.email_enabled is False
     assert "MI_SMTP_HOST" in settings.smtp_missing_fields()
 
 
 def test_settings_secret_not_in_repr(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-secret-value")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-secret-value")
     monkeypatch.setenv("MI_SMTP_PASSWORD", "smtp-secret-value")
     settings = Settings()
-    assert settings.anthropic_api_key is not None
+    assert settings.openrouter_api_key is not None
     assert "sk-test-secret-value" not in repr(settings)
     assert "smtp-secret-value" not in str(settings)
 
