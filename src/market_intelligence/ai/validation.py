@@ -3,7 +3,8 @@
 Checks, beyond the JSON schema:
 - every claim cites at least one source id that exists in the input;
 - research candidates refer to instruments with fresh, sufficient data;
-- every number and date in the text appears in the input data.
+- every number and date in the text appears in the input data;
+- every text field contains actual words (not placeholders such as ">>>").
 """
 
 from __future__ import annotations
@@ -20,6 +21,11 @@ from market_intelligence.ai.schema import Claim, ReportDraft, ReportInput
 _ISO_DATE_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _PL_DATE_RE = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b")
 _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?")
+# Inline citations like "(source_id: price-US_SPY)" duplicate the rendered [n] references.
+_INLINE_SOURCE_RE = re.compile(r"\s*\(\s*source_ids?\s*:\s*[\w\-, ]*\)", re.IGNORECASE)
+_LETTER_RE = re.compile(r"[^\W\d_]")
+# DECISION: a text field needs at least this many letters to count as content.
+MIN_LETTERS = 3
 
 
 @dataclass
@@ -34,7 +40,7 @@ class ValidationOutcome:
 
 def validate_draft(raw_json: str, report_input: ReportInput) -> ValidationOutcome:
     try:
-        draft = ReportDraft.model_validate_json(raw_json)
+        draft = ReportDraft.model_validate_json(_INLINE_SOURCE_RE.sub("", raw_json))
     except ValidationError as exc:
         details = "; ".join(
             f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()[:10]
@@ -50,6 +56,7 @@ def validate_draft(raw_json: str, report_input: ReportInput) -> ValidationOutcom
         unknown = sorted(set(claim.source_ids) - known_sources)
         if unknown:
             errors.append(f"{path}: unknown source ids {unknown}")
+        errors.extend(_word_errors(path, claim.text))
         cited_news = [s for sid in claim.source_ids for s in news_text.get(sid, [])]
         errors.extend(f"{path}: {e}" for e in trusted.extended(cited_news).check(claim.text))
 
@@ -67,12 +74,20 @@ def validate_draft(raw_json: str, report_input: ReportInput) -> ValidationOutcom
         context = trusted.extended([s for sid in cited for s in news_text.get(sid, [])])
         for name in ("risks", "uncertainties", "invalidation_conditions"):
             for j, text in enumerate(getattr(cand, name)):
+                errors.extend(_word_errors(f"{path}.{name}[{j}]", text))
                 errors.extend(f"{path}.{name}[{j}]: {e}" for e in context.check(text))
 
     for j, text in enumerate(draft.limitations):
+        errors.extend(_word_errors(f"limitations[{j}]", text))
         errors.extend(f"limitations[{j}]: {e}" for e in trusted.check(text))
 
     return ValidationOutcome(draft, errors)
+
+
+def _word_errors(path: str, text: str) -> list[str]:
+    if len(_LETTER_RE.findall(text)) < MIN_LETTERS:
+        return [f"{path}: text has no words ({text.strip()[:20]!r})"]
+    return []
 
 
 @dataclass(frozen=True)

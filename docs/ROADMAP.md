@@ -114,6 +114,9 @@ _(agent dopisuje tu decyzje oznaczone `# DECISION:` i znane ograniczenia po każ
   (`mock_data/`, ceny od 100), baner „DANE TESTOWE”, plik `weekly-<tydzień>-mock.*`.
 - Raport nieudany zapisywany jako `*-FAILED.{md,html}`; nie jest wysyłany e-mailem.
 - Tydzień ISO liczony w strefie Europe/Warsaw.
+- Pola tekstowe odpowiedzi muszą mieć co najmniej 3 litery (odrzuca placeholdery typu `>>>`,
+  zaobserwowane u darmowego modelu); dopiski `(source_id: …)` w tekście są usuwane przed
+  walidacją, bo źródła i tak renderuje kod jako [n].
 
 ### Etap 1 — znane ograniczenia
 

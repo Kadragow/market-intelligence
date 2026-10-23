@@ -159,6 +159,23 @@ def test_injected_number_from_untrusted_news_not_allowed_without_citation() -> N
     assert not validate_draft(draft.model_dump_json(), _input()).ok
 
 
+def test_placeholder_texts_are_rejected() -> None:
+    base = mock_draft(_input())
+    cand = base.research_candidates[0].model_copy(update={"risks": [">>>", "<<<"]})
+    draft = base.model_copy(update={"research_candidates": [cand], "limitations": [">>>"]})
+    outcome = validate_draft(draft.model_dump_json(), _input())
+    assert any("risks[0]: text has no words" in e for e in outcome.errors)
+    assert any("limitations[0]: text has no words" in e for e in outcome.errors)
+
+
+def test_inline_source_ids_are_removed_from_text() -> None:
+    draft = _draft(summary=[_claim("SPY spadł (source_id: price-US_SPY).")])
+    outcome = validate_draft(draft.model_dump_json(), _input())
+    assert outcome.ok, outcome.errors
+    assert outcome.draft is not None
+    assert outcome.draft.summary[0].text == "SPY spadł."
+
+
 def test_candidate_with_stale_data_is_rejected() -> None:
     base = mock_draft(_input())
     cand = base.research_candidates[0].model_copy(update={"instrument_id": "US_10Y"})

@@ -126,6 +126,9 @@ UPDATE_GOLDEN=1 uv run pytest tests/integration   # odświeżenie golden files
   całkowite mogą przypadkowo pasować do wartości z danych.
 - OpenRouter nie ma endpointu do liczenia tokenów, więc szacunek wejścia to heurystyka
   (znaki / 3). Faktyczny koszt z odpowiedzi (`usage.cost`, w kredytach) jest logowany.
+- Modele z rozumowaniem (np. część darmowych) zużywają `MI_LLM_MAX_TOKENS` także na
+  rozumowanie; przy błędzie „max_tokens reached” zwiększ ten limit (dla `:free` nie
+  zmienia to kosztu).
 - Darmowe modele (`:free`) mają limity: 20 zapytań/min i 50/dzień (1000/dzień po zakupie
   co najmniej 10 kredytów). Nie każdy darmowy model obsługuje structured outputs, a jakość
   może nie wystarczyć, żeby przejść walidację liczb i źródeł.
