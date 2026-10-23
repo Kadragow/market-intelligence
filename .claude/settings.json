@@ -2,16 +2,13 @@
   "permissions": {
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)",
       "Edit(./.env)",
-      "Edit(./.env.*)",
       "Write(./.env)",
-      "Write(./.env.*)",
-      "Bash(cat .env*)",
-      "Bash(less .env*)",
-      "Bash(head .env*)",
-      "Bash(tail .env*)",
-      "Bash(grep * .env*)"
+      "Bash(cat .env)",
+      "Bash(less .env)",
+      "Bash(head .env)",
+      "Bash(tail .env)",
+      "Bash(grep * .env)"
     ],
     "allow": ["Read(./.env.example)"]
   }
