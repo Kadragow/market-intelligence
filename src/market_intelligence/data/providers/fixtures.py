@@ -16,6 +16,7 @@ class FixturePriceProvider:
     date,open,high,low,close,adj_close,volume (empty cell = missing)."""
 
     name = "fixture"
+    dataset = "synthetic daily CSV"
 
     def __init__(self, directory: Path) -> None:
         self._directory = directory

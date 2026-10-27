@@ -24,7 +24,7 @@ from market_intelligence.delivery.email import (
     SmtpEmailSender,
     decide_sending,
 )
-from market_intelligence.domain.models import DataStatus, NewsItem
+from market_intelligence.domain.models import DataProvenance, DataStatus, NewsItem
 from market_intelligence.mock_data import MOCK_PRICES_DIR, MOCK_RSS_DIR, MOCK_SOURCES_FILE
 from market_intelligence.reports.render import (
     ReportContext,
@@ -92,8 +92,13 @@ def run_weekly(
         snap = compute_snapshot(
             instrument,
             raw,
-            provider=prices.name,
-            fetched_at=now,
+            provenance=DataProvenance(
+                provider=prices.name,
+                dataset=prices.dataset,
+                identifier=raw.symbol,
+                fetched_at=now,
+                attempts=raw.attempts,
+            ),
             as_of=now.date(),
             stale_after_business_days=settings.stale_after_business_days,
         )

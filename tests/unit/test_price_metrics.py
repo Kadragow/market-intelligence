@@ -4,7 +4,13 @@ import pytest
 
 from market_intelligence.analysis.price_metrics import compute_snapshot
 from market_intelligence.data.providers.base import PriceSeriesResult
-from market_intelligence.domain.models import AssetClass, DataStatus, Instrument, PriceBar
+from market_intelligence.domain.models import (
+    AssetClass,
+    DataProvenance,
+    DataStatus,
+    Instrument,
+    PriceBar,
+)
 
 NOW = datetime(2026, 10, 18, 16, 0, tzinfo=UTC)
 AS_OF = date(2026, 10, 18)
@@ -35,8 +41,9 @@ def test_ok_snapshot_with_changes() -> None:
     snap = compute_snapshot(
         INSTRUMENT,
         PriceSeriesResult(bars, "SPY"),
-        provider="test",
-        fetched_at=NOW,
+        provenance=DataProvenance(
+            provider="test", dataset="test", identifier="SPY", fetched_at=NOW
+        ),
         as_of=AS_OF,
         stale_after_business_days=5,
     )
@@ -55,8 +62,9 @@ def test_no_bars_is_insufficient_data_not_zero() -> None:
     snap = compute_snapshot(
         INSTRUMENT,
         PriceSeriesResult([], "SPY", error="dostawca nie zwrócił danych"),
-        provider="test",
-        fetched_at=NOW,
+        provenance=DataProvenance(
+            provider="test", dataset="test", identifier="SPY", fetched_at=NOW
+        ),
         as_of=AS_OF,
         stale_after_business_days=5,
     )
@@ -71,8 +79,9 @@ def test_stale_series_is_flagged() -> None:
     snap = compute_snapshot(
         INSTRUMENT,
         PriceSeriesResult(bars, "SPY"),
-        provider="test",
-        fetched_at=NOW,
+        provenance=DataProvenance(
+            provider="test", dataset="test", identifier="SPY", fetched_at=NOW
+        ),
         as_of=AS_OF,
         stale_after_business_days=5,
     )
@@ -85,8 +94,9 @@ def test_short_history_has_no_month_change() -> None:
     snap = compute_snapshot(
         INSTRUMENT,
         PriceSeriesResult(bars, "SPY"),
-        provider="test",
-        fetched_at=NOW,
+        provenance=DataProvenance(
+            provider="test", dataset="test", identifier="SPY", fetched_at=NOW
+        ),
         as_of=AS_OF,
         stale_after_business_days=5,
     )
@@ -100,8 +110,9 @@ def test_all_closes_missing_is_insufficient() -> None:
     snap = compute_snapshot(
         INSTRUMENT,
         PriceSeriesResult(bars, "SPY"),
-        provider="test",
-        fetched_at=NOW,
+        provenance=DataProvenance(
+            provider="test", dataset="test", identifier="SPY", fetched_at=NOW
+        ),
         as_of=AS_OF,
         stale_after_business_days=5,
     )
@@ -114,8 +125,9 @@ def test_raw_close_used_when_adjusted_missing() -> None:
     snap = compute_snapshot(
         INSTRUMENT,
         PriceSeriesResult(bars, "SPY"),
-        provider="test",
-        fetched_at=NOW,
+        provenance=DataProvenance(
+            provider="test", dataset="test", identifier="SPY", fetched_at=NOW
+        ),
         as_of=AS_OF,
         stale_after_business_days=5,
     )

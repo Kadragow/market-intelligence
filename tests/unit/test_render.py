@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from market_intelligence.ai.schema import Claim, ReportDraft, Scenarios
 from market_intelligence.analysis.price_metrics import InstrumentSnapshot
-from market_intelligence.domain.models import AssetClass, DataStatus, Instrument
+from market_intelligence.domain.models import AssetClass, DataProvenance, DataStatus, Instrument
 from market_intelligence.reports.render import (
     DISCLAIMER,
     ReportContext,
@@ -20,9 +20,9 @@ def _ctx(text: str = "Tekst <script>alert(1)</script> | x") -> ReportContext:
     snap = InstrumentSnapshot(
         instrument=Instrument(id="US_SPY", name="S&P 500", asset_class=AssetClass.ETF),
         source_id="price-US_SPY",
-        provider="test",
-        symbol="SPY",
-        fetched_at=NOW,
+        provenance=DataProvenance(
+            provider="test", dataset="test", identifier="SPY", fetched_at=NOW
+        ),
         status=DataStatus.OK,
         last_close=1234.5,
         last_observed_at=NOW,

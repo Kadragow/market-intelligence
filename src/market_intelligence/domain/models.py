@@ -53,6 +53,20 @@ class Instrument(BaseModel):
         return self.symbols.get(provider)
 
 
+class DataProvenance(BaseModel):
+    """Where a piece of data came from and when it was fetched."""
+
+    model_config = ConfigDict(frozen=True)
+
+    provider: str
+    # Endpoint or dataset within the provider, without credentials.
+    dataset: str
+    # Provider-side identifier: ticker symbol, series id, feed URL.
+    identifier: str | None
+    fetched_at: UtcDatetime
+    attempts: int = Field(default=1, ge=1)
+
+
 class PriceBar(BaseModel):
     model_config = ConfigDict(frozen=True)
 

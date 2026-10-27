@@ -112,15 +112,17 @@ def _environment() -> Environment:
 def _source_refs(ctx: ReportContext) -> list[SourceRef]:
     refs: list[SourceRef] = []
     for snap in ctx.snapshots:
-        symbol = snap.symbol or "brak symbolu"
+        prov = snap.provenance
+        symbol = prov.identifier or "brak symbolu"
         refs.append(
             SourceRef(
                 number=len(refs) + 1,
                 source_id=snap.source_id,
-                label=f"Ceny: {snap.instrument.name} ({snap.provider}, {symbol})",
+                label=f"Ceny: {snap.instrument.name} ({prov.provider}, {symbol})",
                 link=None,
                 details=(
-                    f"pobrano {fmt_dt(snap.fetched_at)}; "
+                    f"{prov.dataset}; pobrano {fmt_dt(prov.fetched_at)}"
+                    f"{_attempts_note(prov.attempts)}; "
                     f"ostatnia obserwacja {fmt_date(snap.last_observed_at)}"
                 ),
             )
@@ -138,6 +140,10 @@ def _source_refs(ctx: ReportContext) -> list[SourceRef]:
             )
         )
     return refs
+
+
+def _attempts_note(attempts: int) -> str:
+    return f" (próby: {attempts})" if attempts > 1 else ""
 
 
 def render_report(ctx: ReportContext) -> RenderedReport:

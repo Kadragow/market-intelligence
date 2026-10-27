@@ -18,6 +18,7 @@ from market_intelligence.domain.models import (
 
 class PriceProvider(Protocol):
     name: str
+    dataset: str
 
     def get_daily_history(
         self, instrument: Instrument, start: date, end: date, fetched_at: datetime

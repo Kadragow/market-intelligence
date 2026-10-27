@@ -29,6 +29,7 @@ _COLUMNS = {
 
 class YFinancePriceProvider:
     name = "yfinance"
+    dataset = "Ticker.history(interval=1d, auto_adjust=False)"
 
     def __init__(
         self,
