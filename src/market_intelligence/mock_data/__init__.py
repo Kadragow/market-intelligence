@@ -10,3 +10,4 @@ MOCK_DATA_DIR = Path(__file__).resolve().parent
 MOCK_PRICES_DIR = MOCK_DATA_DIR / "prices"
 MOCK_RSS_DIR = MOCK_DATA_DIR / "rss"
 MOCK_SOURCES_FILE = MOCK_DATA_DIR / "sources.yaml"
+MOCK_FRED_DIR = MOCK_DATA_DIR / "fred"

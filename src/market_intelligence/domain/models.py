@@ -121,3 +121,43 @@ class NewsItem(BaseModel):
     @staticmethod
     def make_id(link: str) -> str:
         return "news-" + hashlib.sha256(link.encode("utf-8")).hexdigest()[:12]
+
+
+class MacroFrequency(StrEnum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    QUARTERLY = "quarterly"
+
+
+class MacroSeries(BaseModel):
+    """A configured macro series (config/macro.yaml)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    frequency: MacroFrequency
+    stale_after_days: int = Field(ge=1)
+    yoy: bool = False
+
+
+class MacroObservation(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    series_id: str
+    # Start of the period the value describes (e.g. 2026-09-01 for September).
+    observed_at: UtcDatetime
+    value: float | None
+
+
+class MacroSeriesInfo(BaseModel):
+    """Series metadata as reported by the provider."""
+
+    model_config = ConfigDict(frozen=True)
+
+    title: str
+    units: str | None = None
+    frequency: str | None = None
+    # When the provider last updated the series (its publication time).
+    updated_at: UtcDatetime | None = None

@@ -10,6 +10,9 @@ from typing import Protocol
 from market_intelligence.domain.models import (
     AssetClass,
     Instrument,
+    MacroObservation,
+    MacroSeries,
+    MacroSeriesInfo,
     NewsItem,
     NewsSource,
     PriceBar,
@@ -23,6 +26,15 @@ class PriceProvider(Protocol):
     def get_daily_history(
         self, instrument: Instrument, start: date, end: date, fetched_at: datetime
     ) -> PriceSeriesResult: ...
+
+
+class MacroProvider(Protocol):
+    name: str
+    dataset: str
+
+    def get_series(
+        self, series: MacroSeries, start: date, end: date, fetched_at: datetime
+    ) -> MacroSeriesResult: ...
 
 
 class NewsProvider(Protocol):
@@ -39,6 +51,14 @@ class PriceSeriesResult:
     symbol: str | None
     error: str | None = None
     warnings: list[str] = field(default_factory=list)
+    attempts: int = 1
+
+
+@dataclass
+class MacroSeriesResult:
+    observations: list[MacroObservation]
+    info: MacroSeriesInfo | None = None
+    error: str | None = None
     attempts: int = 1
 
 

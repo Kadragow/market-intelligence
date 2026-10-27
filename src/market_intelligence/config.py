@@ -10,7 +10,7 @@ from pydantic import AliasChoices, BaseModel, Field, SecretStr, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from market_intelligence.data.http import RetryPolicy
-from market_intelligence.domain.models import Instrument, NewsSource
+from market_intelligence.domain.models import Instrument, MacroSeries, NewsSource
 
 
 class ConfigError(Exception):
@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     http_max_attempts: int = Field(default=3, ge=1, le=10)
     http_backoff_base_seconds: float = Field(default=1.0, ge=0)
     http_backoff_max_seconds: float = Field(default=30.0, ge=0)
+
+    # --- Macro data (FRED) ---
+    fred_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("FRED_API_KEY", "MI_FRED_API_KEY"),
+    )
+    # Enough history for a year-over-year change of monthly series.
+    macro_history_days: int = Field(default=400, ge=60)
 
     # --- LLM via OpenRouter ---
     openrouter_api_key: SecretStr | None = Field(
@@ -105,6 +113,10 @@ class _InstrumentsFile(BaseModel):
     instruments: list[Instrument] = Field(min_length=1)
 
 
+class _MacroFile(BaseModel):
+    series: list[MacroSeries] = Field(default_factory=list)
+
+
 class _SourcesFile(BaseModel):
     feeds: list[NewsSource] | None = None
 
@@ -126,6 +138,18 @@ def load_instruments(path: Path) -> list[Instrument]:
     if duplicates:
         raise ConfigError(f"Duplicate instrument ids in {path}: {', '.join(duplicates)}")
     return parsed.instruments
+
+
+def load_macro_series(path: Path) -> list[MacroSeries]:
+    try:
+        parsed = _MacroFile.model_validate(_read_yaml(path) or {})
+    except ValidationError as exc:
+        raise ConfigError(f"Invalid macro file {path}: {exc}") from exc
+    ids = [s.id for s in parsed.series]
+    duplicates = sorted({i for i in ids if ids.count(i) > 1})
+    if duplicates:
+        raise ConfigError(f"Duplicate macro series ids in {path}: {', '.join(duplicates)}")
+    return parsed.series
 
 
 def load_sources(path: Path) -> list[NewsSource]:
