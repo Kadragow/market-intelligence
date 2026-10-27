@@ -13,7 +13,8 @@ Specyfikacja: [docs/SPEC.md](docs/SPEC.md) · Plan etapów: [docs/ROADMAP.md](do
 
 - [uv](https://docs.astral.sh/uv/) (instaluje też Pythona 3.12)
 - Do trybu `--mock`: nic więcej — bez kluczy API i bez sieci.
-- Do trybu produkcyjnego: klucz OpenRouter API, dostęp do internetu (Yahoo Finance, RSS).
+- Do trybu produkcyjnego: klucz OpenRouter API, dostęp do internetu (Yahoo Finance, RSS,
+  FRED). Klucz FRED jest opcjonalny: bez niego sekcja makro ma status „brak danych”.
 
 ## Instalacja
 
@@ -29,19 +30,22 @@ uv run mi weekly --mock --dry-run
 ```
 
 Tryb `--mock` używa **syntetycznych** danych z `src/market_intelligence/mock_data/`
-(ceny startujące od 100, testowe nagłówki RSS) i deterministycznego „modelu” zamiast
+(ceny startujące od 100, testowe nagłówki RSS, serie makro w formacie FRED) i deterministycznego „modelu” zamiast
 prawdziwego LLM. Zegar jest zamrożony na niedzielę 2026-10-18 18:00 Europe/Warsaw, więc wynik
 jest powtarzalny. Raport trafia do `reports/weekly-2026-W42-mock.{md,html}` i ma wyraźny
 baner „DANE TESTOWE”. Dane testowe celowo zawierają przypadki brzegowe: brak danych
-(USD/PLN), dane nieaktualne (US 10Y), duplikat (GLD), brakujące zamknięcie (EWG) oraz
-nagłówek z próbą prompt injection.
+(USD/PLN), dane nieaktualne (US 10Y, seria UNRATE), duplikat (GLD), brakujące zamknięcie
+(EWG), brakująca wartość makro (DGS10) oraz nagłówek z próbą prompt injection.
 
 ## Konfiguracja
 
 1. Skopiuj `.env.example` do `.env` i uzupełnij potrzebne wartości. `.env` jest w `.gitignore`.
 2. `config/instruments.yaml` — lista instrumentów (symbole w notacji Yahoo Finance).
-3. `config/sources.yaml` — kanały RSS. **Domyślnie pusta**: system nie zgaduje adresów,
-   uzupełnia je operator. Bez kanałów raport zawiera adnotację o braku wiadomości.
+3. `config/sources.yaml` — kanały RSS (lista operatora; system nie zgaduje adresów).
+   Bez kanałów raport zawiera adnotację o braku wiadomości.
+4. `config/macro.yaml` — serie makro z FRED: polska nazwa, częstotliwość, próg
+   świeżości w dniach i to, czy liczyć zmianę rok do roku. Tytuł i jednostki serii
+   pobierane są z API FRED.
 
 ### Zmienne środowiskowe
 
@@ -53,6 +57,8 @@ nagłówek z próbą prompt injection.
 | `MI_LLM_MAX_COST_USD` | `0.50` | Limit kosztu na uruchomienie. Przed wywołaniem liczony jest górny szacunek (wejście ≈ znaki / 3 + pełne `max_tokens`); po przekroczeniu wywołanie nie następuje. |
 | `MI_LLM_INPUT_USD_PER_MTOK` / `MI_LLM_OUTPUT_USD_PER_MTOK` | `2.0` / `10.0` | Maksymalna cena w USD za 1M tokenów. Służy do szacunku kosztu i jest wysyłana do OpenRouter jako `provider.max_price`, więc droższy dostawca nie zostanie użyty. Domyślnie stawki Sonnet 5.5 u Anthropic; sprawdź stronę modelu na openrouter.ai. Dla modeli `:free` ustaw `0` / `0`. |
 | `MI_LLM_DATA_COLLECTION` | `allow` | `allow` (domyślne w OpenRouter) albo `deny` — tylko dostawcy, którzy nie przechowują promptów (mniej modeli, darmowe mogą być niedostępne). |
+| `FRED_API_KEY` | — | Darmowy klucz z https://fred.stlouisfed.org/docs/api/api_key.html. Opcjonalny. |
+| `MI_HTTP_MAX_ATTEMPTS` | `3` | Liczba prób dla RSS, yfinance, FRED i OpenRouter (wykładniczy backoff z jitterem, `Retry-After` respektowany do `MI_HTTP_BACKOFF_MAX_SECONDS`). OpenRouter ponawiany tylko przy 429, 503 i błędach połączenia, żeby nie zapłacić dwa razy. |
 | `MI_EMAIL_ENABLED` | `false` | Jawna zgoda na wysyłkę e-maili. |
 | `MI_SMTP_HOST`, `MI_SMTP_PORT`, `MI_SMTP_USERNAME`, `MI_SMTP_PASSWORD`, `MI_SMTP_USE_STARTTLS` | — / `587` / — / — / `true` | Serwer SMTP. |
 | `MI_EMAIL_FROM`, `MI_EMAIL_TO` | — | Nadawca i odbiorcy (lista po przecinku). |
@@ -88,18 +94,29 @@ Kody wyjścia: `0` — sukces, `1` — raport nie przeszedł walidacji (zapisany
 ## Jak powstaje raport
 
 1. Ceny dzienne (yfinance) → czyszczenie (duplikaty, NaN, wartości ≤ 0 → brak) →
+   wykrywanie luk (więcej niż `MI_PRICE_MAX_GAP_BUSINESS_DAYS` brakujących dni roboczych) →
    status `ok` / `stale` / `insufficient_data` → zmiana tygodniowa i miesięczna.
-2. Nagłówki RSS (tylko tytuł, link, źródło, daty, krótki lead — nigdy pełne artykuły).
-3. Dane policzone przez kod trafiają do modelu jako JSON; nagłówki w osobnym bloku
+2. Serie makro (FRED) → brak wartości (`.`) to `None` → status świeżości według
+   `config/macro.yaml` → ostatnia i poprzednia wartość, zmiana, zmiana r/r.
+3. Nagłówki RSS (tylko tytuł, link, źródło, daty, krótki lead — nigdy pełne artykuły):
+   najnowsze wpisy z każdego kanału, deduplikacja po linku i znormalizowanym tytule
+   (także między źródłami), wybór równo po kategoriach.
+4. Każda dana ma zapisane pochodzenie: dostawca, endpoint, symbol/seria, czas pobrania,
+   liczba prób (sekcja 10 raportu).
+5. Dane policzone przez kod trafiają do modelu jako JSON; nagłówki w osobnym bloku
    oznaczonym jako niezaufane dane.
-4. Odpowiedź ma narzucony schemat JSON (structured outputs w OpenRouter:
+6. Odpowiedź ma narzucony schemat JSON (structured outputs w OpenRouter:
    `response_format: json_schema` ze schematem z Pydantic, `provider.require_parameters`
    kieruje zapytanie tylko do dostawców, którzy go obsługują) i jest walidowana przez kod:
    - każda teza ma co najmniej jedno istniejące źródło,
    - każda liczba i data w tekście występuje w danych wejściowych (liczby z nagłówka tylko
      wtedy, gdy teza cytuje ten nagłówek),
    - kandydaci do researchu mają świeże i kompletne dane.
-5. Tabele, źródła i timestampy renderuje kod (Jinja2); model pisze tylko komentarz.
+7. Tabele, źródła i timestampy renderuje kod (Jinja2); model pisze tylko komentarz.
+
+Dane makro: *This product uses the FRED® API but is not endorsed or certified by the
+Federal Reserve Bank of St. Louis.* (nota wymagana przez warunki FRED API, dodawana
+też do raportu).
 
 ## Rozwój
 
@@ -111,14 +128,15 @@ uv run mypy src          # typy (strict)
 UPDATE_GOLDEN=1 uv run pytest tests/integration   # odświeżenie golden files
 ```
 
-## Znane ograniczenia (Etap 1)
+## Znane ograniczenia
 
 - yfinance to prototyp, nie licencjonowany feed; dane mogą być opóźnione lub niepełne.
-- Brak danych makro (FRED — Etap 2), fundamentów (Etap 4) i kalendarza wydarzeń.
+- Brak danych fundamentalnych (Etap 4) i kalendarza wydarzeń. Makro to tylko 4 serie
+  z USA; dane FRED mogą należeć do podmiotów trzecich (warunki FRED API).
 - Brak scoringu i sygnałów (Etap 4) — sekcja „kandydaci do researchu” to tylko
   interpretacja prostych zmian cen przez model, nie rekomendacja.
-- Brak retry/backoff dla yfinance, RSS i OpenRouter (Etap 2). OpenRouter sam przełącza
-  się na zapasowego dostawcę, jeśli błąd wystąpi przed pierwszym tokenem.
+- yfinance rzuca różne wyjątki, więc ponawiany jest każdy; nieznany symbol też zużywa
+  wszystkie próby.
 - Brak bazy danych i historii sygnałów (Etap 3); raporty to pliki w `reports/`.
 - Brak kontroli duplikatów wysyłki: ponowne `--send` w tym samym tygodniu wyśle maila
   ponownie (Etap 5). Plik raportu jest nadpisywany.

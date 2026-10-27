@@ -38,6 +38,7 @@ keep this section accurate.
 src/market_intelligence/
   config.py            settings from env (.env), validated with Pydantic
   domain/              core models and enums (Instrument, PriceBar, NewsItem, Signal...)
+  data/http.py         shared HTTP retry (backoff, Retry-After, no query strings in logs)
   data/providers/      one adapter per data source, behind shared interfaces
   analysis/            technical, fundamental, macro, news, scoring, risk
   ai/                  LLM client (OpenRouter), prompts, schema, validation, report writer
@@ -48,7 +49,7 @@ src/market_intelligence/
   mock_data/           synthetic prices/RSS used by `--mock`
   pipeline.py          weekly run: fetch -> compute -> LLM draft -> validate -> render -> send
   cli.py               entry point `mi`
-config/                instruments.yaml, sources.yaml, scoring.yaml
+config/                instruments.yaml, sources.yaml, macro.yaml, scoring.yaml
 tests/unit, tests/integration, tests/fixtures
 reports/               generated reports (gitignored)
 ```

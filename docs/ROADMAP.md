@@ -28,11 +28,15 @@ kluczem OpenRouter, prawdziwym SMTP ani na żywych danych yfinance/RSS.
 
 ## Etap 2 — jakość i normalizacja danych
 
-- [ ] Wspólne interfejsy providerów (ceny, fundamenty, newsy, filings, makro)
-- [ ] Adapter FRED
-- [ ] Retry, exponential backoff, timeouty, obsługa limitów
-- [ ] Timestampy (published/observed/fetched) i pochodzenie danych
-- [ ] Walidacja świeżości, duplikatów i luk; status danych nieaktualnych
+- [x] Wspólne interfejsy providerów (ceny, newsy, makro); fundamenty i filings przeniesione
+      do Etapu 4 (decyzja operatora 2026-10-27: interfejs razem z pierwszą implementacją)
+- [x] Adapter FRED
+- [x] Retry, exponential backoff, timeouty, obsługa limitów
+- [x] Timestampy (published/observed/fetched) i pochodzenie danych
+- [x] Walidacja świeżości, duplikatów i luk; status danych nieaktualnych
+
+Status: ukończony 2026-10-27. Sprawdzony na żywych danych FRED, yfinance i RSS (bez
+wywołania LLM); pełny raport z LLM na kodzie z Etapu 2 nie był uruchamiany przez agenta.
 
 ## Etap 3 — baza danych
 
@@ -44,6 +48,7 @@ kluczem OpenRouter, prawdziwym SMTP ani na żywych danych yfinance/RSS.
 ## Etap 4 — analityka inwestycyjna
 
 - [ ] Silnik techniczny (krótkoterminowy)
+- [ ] Interfejsy `FundamentalsProvider` i `FilingsProvider` (przeniesione z Etapu 2)
 - [ ] Silnik fundamentalny (długoterminowy) — wymaga wyboru dostawcy fundamentów
 - [ ] Silnik makro
 - [ ] Scoring z konfigurowalnymi wagami (`config/scoring.yaml`) i analiza ryzyka
@@ -67,9 +72,9 @@ kluczem OpenRouter, prawdziwym SMTP ani na żywych danych yfinance/RSS.
 ## Otwarte decyzje operatora
 
 - [ ] Potwierdzić listę instrumentów startowych (`docs/SPEC.md` §3)
-- [ ] Podać kanały RSS (`config/sources.yaml`)
+- [x] Podać kanały RSS (`config/sources.yaml`) — 17 kanałów, zweryfikowane 2026-10-27
 - [ ] Potwierdzić harmonogram (domyślnie niedziela 18:00 Europe/Warsaw)
-- [ ] Dane SMTP i adres odbiorcy
+- [x] Dane SMTP i adres odbiorcy (wysyłka przetestowana przez operatora)
 - [ ] Klucz OpenRouter, wybór modelu (płatny lub `:free`) i miesięczny limit kosztu
 - [ ] Dostawca fundamentów przed Etapem 4
 
@@ -130,3 +135,40 @@ _(agent dopisuje tu decyzje oznaczone `# DECISION:` i znane ograniczenia po każ
 - Endpoint `/api/v1/models` zwrócił w trakcie sprawdzania inną strukturę niż w dokumentacji
   (bez cen), dlatego ceny nie są pobierane automatycznie.
 - `config/sources.yaml` pusty — potrzebna lista kanałów RSS od operatora.
+
+### Etap 2 — decyzje (`# DECISION:` w kodzie)
+
+- Retry własny (`data/http.py`), bez nowej zależności: domyślnie 3 próby, opóźnienie
+  1 s × 2^n (maks. 30 s) z jitterem 50–100%, `Retry-After` respektowany do maksimum.
+  Ponawiane: błędy transportu, 429, 500, 502, 503, 504. Adresy w logach bez query stringu.
+- OpenRouter ponawiany tylko przy 429, 503 i błędach nawiązania połączenia — tam, gdzie
+  generacja nie mogła się odbyć i nic nie zostało naliczone. 502 i timeout odczytu nie są
+  ponawiane.
+- yfinance: ponawiany każdy wyjątek (biblioteka rzuca wiele niepowiązanych typów).
+- Pochodzenie danych: `DataProvenance` (dostawca, endpoint/zbiór, symbol/seria, czas
+  pobrania, liczba prób). Dla FRED (dwa zapytania na serię) liczba prób to maksimum z nich.
+- Luka w cenach: więcej niż 3 kolejne brakujące dni robocze (`MI_PRICE_MAX_GAP_BUSINESS_DAYS`);
+  luka nie zmienia statusu, jest zgłaszana jako problem z danymi.
+- Wiadomości: najnowsze wpisy z kanału przed obcięciem do limitu; deduplikacja po linku
+  i znormalizowanym tytule (casefold, bez znaków diakrytycznych i interpunkcji), także między
+  źródłami; do LLM trafia wybór round-robin po kategoriach.
+- Makro: progi świeżości w `config/macro.yaml` (75 dni dla serii miesięcznych, 7 dla
+  dziennych); zmiana r/r tylko z obserwacji dokładnie sprzed roku (bez interpolacji);
+  historia 550 dni od pierwszego dnia miesiąca; braki (`.`) zgłaszane tylko dla serii
+  rzadszych niż dzienne (w dziennych to święta).
+- Brak `FRED_API_KEY` nie przerywa raportu: makro ma status „niewystarczające dane”.
+- Zaokrąglenie makro w danych dla LLM i w tabeli: 2 miejsca dla jednostek „Percent”,
+  3 dla indeksów; zmiana r/r 2 miejsca.
+- `DGS10` (FRED) i `^TNX` (Yahoo) to osobne pozycje z osobnym źródłem.
+
+### Etap 2 — znane ograniczenia
+
+- Pełny przebieg `mi weekly --dry-run` z LLM na kodzie Etapu 2 nie był uruchomiony przez
+  agenta (koszt). Sprawdzono osobno: FRED (4 serie OK), yfinance (8 instrumentów, bez luk),
+  RSS (303 wpisy, 40 wybranych, po 8 z 5 kategorii).
+- Retry nie ma wspólnego limitu czasu na całe uruchomienie; w najgorszym razie 17 kanałów RSS
+  × 3 próby wydłuża przebieg o kilka minut.
+- Wykrywanie luk nie zna kalendarzy giełd; dłuższe zamknięcia giełd mogą dać fałszywe luki.
+- Deduplikacja wiadomości po tytule nie łapie parafraz tego samego wydarzenia.
+- Dane FRED mogą należeć do podmiotów trzecich; przed użyciem poza własnym (osobistym)
+  użytkiem trzeba sprawdzić prawa do konkretnej serii (warunki FRED API).
