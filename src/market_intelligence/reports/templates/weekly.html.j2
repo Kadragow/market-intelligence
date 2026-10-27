@@ -1,0 +1,144 @@
+{% macro refs_html(claim) %}{% for n in cite(claim) %} <a href="#src-{{ n }}">[{{ n }}]</a>{% endfor %}{% endmacro %}
+{% macro claims(items, empty) %}
+{% if items %}
+<ul>
+{% for c in items %}
+  <li>{{ c.text }}{{ refs_html(c) }}</li>
+{% endfor %}
+</ul>
+{% else %}
+<p class="empty">{{ empty }}</p>
+{% endif %}
+{% endmacro %}
+{% set d = ctx.draft %}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tygodniowy brief rynkowy {{ ctx.report_week }}</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.5; color: #1a1a1a; background: #ffffff; margin: 0; padding: 16px; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.5em; margin-top: 0; }
+  h2 { font-size: 1.15em; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-top: 1.6em; }
+  h3 { font-size: 1em; }
+  .meta, .note, .empty { color: #555; font-size: 0.9em; }
+  .empty { font-style: italic; }
+  .banner { background: #fff3cd; border: 1px solid #e0c060; padding: 10px; font-weight: bold; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; white-space: nowrap; }
+  td.num { text-align: right; }
+  th { background: #f4f4f4; }
+  a { color: #0b5cad; }
+  footer { margin-top: 2em; border-top: 1px solid #ddd; padding-top: 8px; color: #555; font-size: 0.85em; font-style: italic; }
+</style>
+</head>
+<body>
+<main>
+<h1>Tygodniowy brief rynkowy {{ ctx.report_week }}</h1>
+{% if ctx.mock %}
+<p class="banner">{{ mock_banner }}</p>
+{% endif %}
+<p class="meta">Stan danych na: {{ ctx.as_of | dt }} · Wygenerowano: {{ ctx.generated_at | dt }} · Model: {{ ctx.model }}</p>
+
+<h2>1. Podsumowanie najważniejszych wydarzeń</h2>
+{{ claims(d.summary, "Brak podsumowania.") }}
+
+<h2>2. Obraz globalnych rynków</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Instrument</th><th>Klasa</th><th>Ostatnie zamknięcie</th><th>Waluta</th><th>Zmiana tyg.</th><th>Zmiana mies.</th><th>Data obserwacji</th><th>Status danych</th></tr></thead>
+<tbody>
+{% for r in rows %}
+<tr><td>{{ r.snap.instrument.name }}</td><td>{{ r.snap.instrument.asset_class.value }}</td><td class="num">{{ r.close }}</td><td>{{ r.snap.instrument.currency or "—" }}</td><td class="num">{{ r.snap.change_1w_pct | pct }}</td><td class="num">{{ r.snap.change_1m_pct | pct }}</td><td>{{ r.snap.last_observed_at | date }}</td><td>{{ r.status }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+<p class="note">Zmiany liczone na cenach zamknięcia skorygowanych (jeśli dostępne), w walucie notowania; bez przeliczeń walutowych.</p>
+{{ claims(d.global_markets, "Brak komentarza do rynków.") }}
+
+<h2>3. Najważniejsze wydarzenia makroekonomiczne</h2>
+{{ claims(d.macro, "Brak danych makroekonomicznych w tym etapie (FRED planowany w Etapie 2).") }}
+
+<h2>4. Analiza sektorów i spółek</h2>
+{{ claims(d.sectors_and_companies, "Brak danych do analizy sektorów i spółek.") }}
+
+<h2>5. Kandydaci do dalszego researchu</h2>
+{% if d.research_candidates %}
+<p class="note">To nie są rekomendacje. To instrumenty, którym warto się dokładniej przyjrzeć.</p>
+{% for c in d.research_candidates %}
+<h3>{{ c.instrument_id }} — horyzont {{ c.horizon }}</h3>
+<ul>
+  <li><strong>Teza:</strong> {{ c.thesis.text }}{{ refs_html(c.thesis) }}</li>
+  <li><strong>Argumenty przeciw:</strong>
+    <ul>
+{% for a in c.counterarguments %}
+      <li>{{ a.text }}{{ refs_html(a) }}</li>
+{% endfor %}
+    </ul>
+  </li>
+  <li><strong>Ryzyka:</strong> {{ c.risks | join("; ") }}</li>
+  <li><strong>Niepewności:</strong> {{ c.uncertainties | join("; ") }}</li>
+  <li><strong>Warunki unieważnienia:</strong> {{ c.invalidation_conditions | join("; ") }}</li>
+</ul>
+{% endfor %}
+{% else %}
+<p class="empty">Brak kandydatów w tym tygodniu.</p>
+{% endif %}
+
+<h2>6. Sygnały ostrzegawcze</h2>
+{{ claims(d.warning_signs, "Brak sygnałów ostrzegawczych z analizy.") }}
+{% if data_issues %}
+<p><strong>Problemy z danymi (wykryte przez kod):</strong></p>
+<ul>
+{% for name, status, issues in data_issues %}
+  <li>{{ name }}: {{ status }}{% if issues %} — {{ issues }}{% endif %}</li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<h2>7. Technologie, AI, półprzewodniki i startupy</h2>
+{{ claims(d.technology, "Brak wiadomości technologicznych.") }}
+
+<h2>8. Kalendarz nadchodzących wydarzeń</h2>
+<p class="empty">Brak danych kalendarza w tym etapie.</p>
+
+<h2>9. Scenariusze</h2>
+<ul>
+  <li><strong>Pozytywny:</strong> {{ d.scenarios.positive.text }}{{ refs_html(d.scenarios.positive) }}</li>
+  <li><strong>Bazowy:</strong> {{ d.scenarios.base.text }}{{ refs_html(d.scenarios.base) }}</li>
+  <li><strong>Negatywny:</strong> {{ d.scenarios.negative.text }}{{ refs_html(d.scenarios.negative) }}</li>
+</ul>
+
+<h2>10. Źródła i timestampy danych</h2>
+<ol>
+{% for r in refs %}
+  <li id="src-{{ r.number }}">{% if r.link %}<a href="{{ r.link }}">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %} — {{ r.details }}</li>
+{% endfor %}
+</ol>
+{% if ctx.news_errors %}
+<p>Nieudane pobrania wiadomości:</p>
+<ul>
+{% for sid, err in ctx.news_errors.items() %}
+  <li>{{ sid }}: {{ err }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<h2>11. Ograniczenia i niepewności analizy</h2>
+<ul>
+{% for item in d.limitations %}
+  <li>{{ item }}</li>
+{% endfor %}
+{% for item in ctx.unavailable_data %}
+  <li>Niedostępne w tym etapie: {{ item }}</li>
+{% endfor %}
+</ul>
+
+<footer>{{ disclaimer }}</footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,49 @@
+# Starting instrument list (docs/SPEC.md §3). To be verified by the operator.
+# Symbols use Yahoo Finance notation under the `yfinance` key.
+instruments:
+  - id: US_SPY
+    name: S&P 500 (SPY)
+    asset_class: etf
+    exchange: NYSE Arca
+    currency: USD
+    symbols: {yfinance: SPY}
+  - id: US_QQQ
+    name: Nasdaq 100 (QQQ)
+    asset_class: etf
+    exchange: Nasdaq
+    currency: USD
+    symbols: {yfinance: QQQ}
+  - id: DE_EWG
+    name: Niemcy (EWG)
+    asset_class: etf
+    exchange: NYSE Arca
+    currency: USD
+    symbols: {yfinance: EWG}
+  - id: JP_EWJ
+    name: Japonia (EWJ)
+    asset_class: etf
+    exchange: NYSE Arca
+    currency: USD
+    symbols: {yfinance: EWJ}
+  - id: GOLD_GLD
+    name: Złoto (GLD)
+    asset_class: etf
+    exchange: NYSE Arca
+    currency: USD
+    symbols: {yfinance: GLD}
+  - id: FX_EURUSD
+    name: EUR/USD
+    asset_class: fx
+    currency: USD
+    symbols: {yfinance: EURUSD=X}
+  - id: FX_USDPLN
+    name: USD/PLN
+    asset_class: fx
+    currency: PLN
+    symbols: {yfinance: PLN=X}
+  - id: US_10Y
+    name: Rentowność US 10Y
+    asset_class: yield
+    currency: null
+    symbols: {yfinance: ^TNX}
+    data_notes: Wartość w punktach procentowych, tak jak raportuje dostawca.

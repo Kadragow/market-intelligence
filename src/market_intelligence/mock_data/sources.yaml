@@ -1,0 +1,10 @@
+# SYNTHETIC sources used only by `mi weekly --mock`. Not real feeds.
+feeds:
+  - id: mock_markets
+    name: Mock Markets Wire (dane testowe)
+    url: https://example.com/mock/markets.xml
+    category: finance
+  - id: mock_tech
+    name: Mock Tech Daily (dane testowe)
+    url: https://example.com/mock/tech.xml
+    category: technology

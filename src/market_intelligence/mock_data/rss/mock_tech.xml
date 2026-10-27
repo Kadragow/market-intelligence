@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Mock Tech Daily</title>
+    <link>https://example.com/mock/tech</link>
+    <description>SYNTHETIC test feed. Not real news.</description>
+    <item>
+      <title>[TEST] Producent półprzewodników zapowiada nową fabrykę</title>
+      <link>https://example.com/mock/tech/new-fab</link>
+      <pubDate>Wed, 14 Oct 2026 09:00:00 GMT</pubDate>
+      <description>Syntetyczny lead o inwestycji w moce produkcyjne chipów.</description>
+    </item>
+    <item>
+      <title>[TEST] Startup AI pozyskuje finansowanie</title>
+      <link>https://example.com/mock/tech/ai-startup-round</link>
+      <pubDate>Thu, 15 Oct 2026 14:00:00 GMT</pubDate>
+      <description>Syntetyczny lead: runda finansowania młodej spółki AI.</description>
+    </item>
+  </channel>
+</rss>

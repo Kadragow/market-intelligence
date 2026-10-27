@@ -151,18 +151,17 @@ Statusy:
 Sygnał nigdy nie oznacza automatycznie transakcji. Nie twierdzimy, że scoring
 działa, dopóki nie zostanie zweryfikowany historycznie i poza próbą.
 
-## 7. AI i generowanie raportów (Claude API)
+## 7. AI i generowanie raportów (LLM przez OpenRouter)
 
-- Klient: oficjalne Anthropic Python SDK, opakowane w interfejs `LLMClient`
-  (łatwe mockowanie, możliwa wymiana modelu).
-- Konfiguracja w settings: `ANTHROPIC_API_KEY`, nazwa modelu (domyślnie
-  `claude-sonnet-5-5`), `max_tokens`, limit kosztu na uruchomienie.
-- Klucz API jest rozliczany osobno w Claude Console; subskrypcja Claude Pro
-  go nie obejmuje. Tryb `--mock` działa bez klucza.
+- Klient: API OpenRouter (wybór modeli różnych dostawców, także darmowych `:free`),
+  opakowane w interfejs `LLMClient` (łatwe mockowanie, możliwa wymiana dostawcy).
+- Konfiguracja w settings: `OPENROUTER_API_KEY`, identyfikator modelu (domyślnie
+  `anthropic/claude-sonnet-5.5`), `max_tokens`, maksymalne ceny tokenów, limit kosztu
+  na uruchomienie. Tryb `--mock` działa bez klucza.
 - Model dostaje ustrukturyzowane dane i wyniki obliczone przez kod oraz listę źródeł.
   Nie wymyśla cen, wskaźników ani wyników spółek.
-- Odpowiedź ma ustalony schemat (structured output / tool use z JSON schema —
-  zgodnie z aktualną dokumentacją Anthropic), walidowany Pydantic przed użyciem.
+- Odpowiedź ma ustalony schemat (structured outputs z JSON schema —
+  zgodnie z aktualną dokumentacją OpenRouter), walidowany Pydantic przed użyciem.
 - Walidacja po stronie kodu: każda liczba w raporcie musi pochodzić z danych
   wejściowych; każda teza musi mieć co najmniej jedno źródło.
 - Treść artykułów i dokumentów jest niezaufanymi danymi. Prompt systemowy

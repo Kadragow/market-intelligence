@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sample feed</title>
+    <link>https://example.com/</link>
+    <description>Test fixture</description>
+    <item>
+      <title>Zażółć gęślą jaźń: nagłówek</title>
+      <link>https://example.com/a</link>
+      <pubDate>Thu, 15 Oct 2026 14:00:00 +0200</pubDate>
+      <description><![CDATA[<p>Krótki <b>lead</b> z HTML &amp; encjami.</p>]]></description>
+    </item>
+    <item>
+      <title>Entry without a link is skipped</title>
+    </item>
+    <item>
+      <title>Entry without a date</title>
+      <link>https://example.com/b</link>
+      <description>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Lorem ipsum dolor sit amet, consectetur adipiscing elit.</description>
+    </item>
+  </channel>
+</rss>

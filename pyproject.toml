@@ -1,0 +1,61 @@
+[project]
+name = "market-intelligence"
+version = "0.1.0"
+description = "Research and reporting system: weekly market and technology brief in Polish."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "feedparser>=6.0.14",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "numpy>=2.5.4",
+    "pandas>=3.1.0",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.16.1",
+    "pyyaml>=6.0.3",
+    "typer>=0.27.3",
+    "yfinance>=1.7.0",
+]
+
+[project.scripts]
+mi = "market_intelligence.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/market_intelligence"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.0",
+    "pandas-stubs>=3.0.5.260914",
+    "pytest>=9.1.1",
+    "ruff>=0.17.2",
+    "types-pyyaml>=6.0.12.20260906",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "S", "DTZ"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["yfinance.*", "feedparser.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

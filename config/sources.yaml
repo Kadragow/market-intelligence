@@ -1,0 +1,10 @@
+# RSS feeds for headlines (docs/SPEC.md §4). To be filled in by the operator.
+# The agent does not guess feed URLs. Only titles, links, dates and short RSS
+# leads are stored, never full articles.
+#
+# Example entry:
+#   - id: example_markets
+#     name: Example Markets
+#     url: https://example.com/markets/rss
+#     category: finance        # finance | macro | technology | ai | semiconductors
+feeds: []
