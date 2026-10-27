@@ -8,6 +8,7 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel
 
+from market_intelligence.analysis.data_quality import find_price_gaps
 from market_intelligence.data.providers.base import PriceSeriesResult, clean_bars
 from market_intelligence.domain.models import (
     DataProvenance,
@@ -49,6 +50,7 @@ def compute_snapshot(
     provenance: DataProvenance,
     as_of: date,
     stale_after_business_days: int,
+    max_gap_business_days: int = 3,
 ) -> InstrumentSnapshot:
     issues = list(result.warnings)
     if result.error:
@@ -56,6 +58,7 @@ def compute_snapshot(
     bars, clean_warnings = clean_bars(result.bars, instrument.asset_class)
     issues.extend(clean_warnings)
     valid = [b for b in bars if b.close is not None]
+    issues.extend(find_price_gaps(valid, max_gap_business_days))
 
     common = {
         "instrument": instrument,

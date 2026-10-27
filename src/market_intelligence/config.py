@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     price_history_days: int = Field(default=90, ge=30)
     # DECISION: a series whose last bar is older than this many business days is STALE.
     stale_after_business_days: int = Field(default=5, ge=1)
+    # DECISION: more than this many consecutive missing business days is reported as a gap
+    # (single exchange holidays are normal).
+    price_max_gap_business_days: int = Field(default=3, ge=1)
     news_lookback_days: int = Field(default=7, ge=1)
     news_max_items_per_source: int = Field(default=20, ge=1)
     news_max_items_for_llm: int = Field(default=40, ge=1)

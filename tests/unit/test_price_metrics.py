@@ -132,3 +132,22 @@ def test_raw_close_used_when_adjusted_missing() -> None:
         stale_after_business_days=5,
     )
     assert snap.return_basis == "close"
+
+
+def test_gap_is_reported_as_issue_without_changing_status() -> None:
+    bars = [
+        b
+        for b in _series(date(2026, 10, 16), 45)
+        if not date(2026, 9, 21) <= b.observed_at.date() <= date(2026, 9, 28)
+    ]
+    snap = compute_snapshot(
+        INSTRUMENT,
+        PriceSeriesResult(bars, "SPY"),
+        provenance=DataProvenance(
+            provider="test", dataset="test", identifier="SPY", fetched_at=NOW
+        ),
+        as_of=AS_OF,
+        stale_after_business_days=5,
+    )
+    assert snap.status is DataStatus.OK
+    assert any(i.startswith("luka w danych") for i in snap.issues)

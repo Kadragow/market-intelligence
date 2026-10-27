@@ -14,6 +14,7 @@ from market_intelligence.ai.client import FakeLLMClient, LLMClient
 from market_intelligence.ai.mock_writer import mock_draft
 from market_intelligence.ai.schema import ReportInput
 from market_intelligence.ai.writer import DraftResult, build_report_input, generate_draft
+from market_intelligence.analysis.data_quality import select_news
 from market_intelligence.analysis.price_metrics import InstrumentSnapshot, compute_snapshot
 from market_intelligence.config import ConfigError, Settings, load_instruments, load_sources
 from market_intelligence.data.providers.base import NewsProvider, PriceProvider
@@ -24,7 +25,7 @@ from market_intelligence.delivery.email import (
     SmtpEmailSender,
     decide_sending,
 )
-from market_intelligence.domain.models import DataProvenance, DataStatus, NewsItem
+from market_intelligence.domain.models import DataProvenance, DataStatus
 from market_intelligence.mock_data import MOCK_PRICES_DIR, MOCK_RSS_DIR, MOCK_SOURCES_FILE
 from market_intelligence.reports.render import (
     ReportContext,
@@ -101,15 +102,26 @@ def run_weekly(
             ),
             as_of=now.date(),
             stale_after_business_days=settings.stale_after_business_days,
+            max_gap_business_days=settings.price_max_gap_business_days,
         )
         logger.info("Prices %s: %s (%d bars)", instrument.id, snap.status.value, snap.bar_count)
         snapshots.append(snap)
 
     news_result = news_src.fetch(sources, now)
-    news = _select_news(news_result.items, now, settings)
+    news, duplicates = select_news(
+        news_result.items,
+        now=now,
+        lookback_days=settings.news_lookback_days,
+        max_items=settings.news_max_items_for_llm,
+    )
     for source_id, error in news_result.errors.items():
         logger.warning("News source %s failed: %s", source_id, error)
-    logger.info("News: %d items selected from %d sources", len(news), len(sources))
+    logger.info(
+        "News: %d items selected from %d sources (%d duplicates dropped)",
+        len(news),
+        len(sources),
+        duplicates,
+    )
 
     unavailable = list(UNAVAILABLE_IN_STAGE_1)
     if not sources:
@@ -189,20 +201,6 @@ def run_weekly(
             result.send_reason = "delivery failed"
     logger.info("Delivery: %s", result.send_reason)
     return result
-
-
-def _select_news(items: list[NewsItem], now: datetime, settings: Settings) -> list[NewsItem]:
-    cutoff = now - timedelta(days=settings.news_lookback_days)
-    unique: dict[str, NewsItem] = {}
-    for item in items:
-        # DECISION: items without a publication date are kept (shown as "brak danych");
-        # items published after the as-of time are dropped.
-        if item.published_at is not None and not cutoff <= item.published_at <= now:
-            continue
-        unique.setdefault(item.id, item)
-    oldest = datetime.min.replace(tzinfo=UTC)
-    ordered = sorted(unique.values(), key=lambda n: n.published_at or oldest, reverse=True)
-    return ordered[: settings.news_max_items_for_llm]
 
 
 def _default_price_provider(settings: Settings, mock: bool) -> PriceProvider:
