@@ -27,6 +27,7 @@ def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("MI_CONFIG_DIR", str(ROOT / "config"))
     monkeypatch.setenv("MI_REPORTS_DIR", str(tmp_path / "reports"))
+    monkeypatch.setenv("MI_DATABASE_URL", f"sqlite:///{tmp_path / 'db' / 'mi.db'}")
     return tmp_path
 
 
@@ -276,6 +277,7 @@ def test_real_mode_without_fred_key_marks_macro_missing(
 ) -> None:
     from market_intelligence.pipeline import MOCK_NOW
 
+    _upgraded_db()
     captured = _spy_input(monkeypatch)
     result = run_weekly(
         Settings(),
@@ -316,3 +318,164 @@ def test_sources_list_only_cited_headlines(isolated_env: Path) -> None:
     # The mock writer cites 4 of the 5 synthetic headlines (not the central bank one).
     assert "Przeanalizowane nagłówki: 5; cytowane w raporcie: 4." in md
     assert "Bank centralny pozostawia stopy bez zmian" not in md
+
+
+# --- storage -------------------------------------------------------------------------
+
+
+def _upgraded_db() -> Any:
+    from market_intelligence.storage.db import create_db_engine, upgrade
+
+    engine = create_db_engine(Settings().database_url)
+    upgrade(engine)
+    return engine
+
+
+def _counts(engine: Any) -> dict[str, int]:
+    from sqlalchemy import func, select
+
+    from market_intelligence.storage.models import Base
+
+    tables = [
+        "runs",
+        "instruments",
+        "price_bars",
+        "macro_observations",
+        "news_items",
+        "instrument_snapshots",
+        "macro_snapshots",
+        "reports",
+        "deliveries",
+        "run_errors",
+    ]
+    with engine.connect() as conn:
+        return {
+            t: conn.execute(select(func.count()).select_from(Base.metadata.tables[t])).scalar_one()
+            for t in tables
+        }
+
+
+def test_mock_run_is_recorded_in_repository(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from market_intelligence.storage.sql import SqlRepository
+
+    _smtp_env(monkeypatch)
+    engine = _upgraded_db()
+    sender = RecordingEmailSender()
+    result = run_weekly(
+        Settings(),
+        mock=True,
+        dry_run=False,
+        email_sender=sender,
+        repository=SqlRepository(engine),
+    )
+    assert result.report_ok
+    assert result.storage_errors == []
+    counts = _counts(engine)
+    assert counts["runs"] == 1
+    assert counts["instruments"] == 8
+    assert counts["price_bars"] > 300
+    assert counts["macro_observations"] > 100
+    assert counts["news_items"] == 5
+    assert counts["instrument_snapshots"] == 8
+    assert counts["macro_snapshots"] == 4
+    assert counts["reports"] == 1
+    assert counts["deliveries"] == 1
+    run = SqlRepository(engine).recent_runs()[0]
+    assert run.id == result.run_id
+    assert (run.status, run.mode, run.model) == ("ok", "mock", "mock")
+
+
+def test_rerun_appends_history_without_duplicating_raw_data(isolated_env: Path) -> None:
+    from market_intelligence.storage.sql import SqlRepository
+
+    engine = _upgraded_db()
+    for _ in range(2):
+        run_weekly(Settings(), mock=True, dry_run=True, repository=SqlRepository(engine))
+    counts = _counts(engine)
+    assert counts["runs"] == 2
+    assert counts["reports"] == 2
+    assert counts["instrument_snapshots"] == 16
+    first_bars = counts["price_bars"]
+    run_weekly(Settings(), mock=True, dry_run=True, repository=SqlRepository(engine))
+    assert _counts(engine)["price_bars"] == first_bars
+    assert _counts(engine)["news_items"] == 5
+
+
+def test_failed_report_and_errors_are_recorded(isolated_env: Path) -> None:
+    from market_intelligence.storage.sql import SqlRepository
+
+    engine = _upgraded_db()
+    llm = FakeLLMClient(lambda s, u: "{not json")
+    run_weekly(Settings(), mock=True, dry_run=True, llm=llm, repository=SqlRepository(engine))
+    counts = _counts(engine)
+    assert counts["reports"] == 1
+    assert counts["run_errors"] >= 1
+    assert SqlRepository(engine).recent_runs()[0].status == "failed"
+
+
+def test_live_mode_requires_migrated_database(isolated_env: Path) -> None:
+    with pytest.raises(ConfigError, match="mi db upgrade"):
+        run_weekly(
+            Settings(),
+            mock=False,
+            dry_run=True,
+            price_provider=FixturePriceProvider(MOCK_PRICES_DIR),
+            news_provider=FixtureNewsProvider(MOCK_RSS_DIR),
+            llm=FakeLLMClient(lambda s, u: "{}"),
+        )
+
+
+class BrokenRepository:
+    """Every write fails, like a database that went away mid-run."""
+
+    def __getattr__(self, name: str) -> Any:
+        from market_intelligence.storage.repository import StorageError
+
+        def fail(*args: Any, **kwargs: Any) -> Any:
+            raise StorageError("database error: OperationalError")
+
+        return fail
+
+
+def test_storage_failure_does_not_stop_report_or_email(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _smtp_env(monkeypatch)
+    sender = RecordingEmailSender()
+    result = run_weekly(
+        Settings(), mock=True, dry_run=False, email_sender=sender, repository=BrokenRepository()
+    )
+    assert result.report_ok
+    assert result.sent and len(sender.sent) == 1
+    assert result.markdown_path.is_file()
+    assert result.storage_errors
+    assert result.storage_errors[0] == "start run: database error: OperationalError"
+    assert result.run_id is None
+
+
+def test_cli_db_upgrade_and_status(isolated_env: Path) -> None:
+    runner = CliRunner()
+    status = runner.invoke(app, ["db", "status"])
+    assert status.exit_code == 0, status.output
+    assert "not initialised" in status.output
+    upgraded = runner.invoke(app, ["db", "upgrade"])
+    assert upgraded.exit_code == 0, upgraded.output
+    assert "revision 0001" in upgraded.output
+    status = runner.invoke(app, ["db", "status"])
+    assert "Schema:   0001 (code expects 0001)" in status.output
+
+
+def test_cli_storage_error_exit_code(isolated_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from market_intelligence import cli, pipeline
+
+    original = pipeline.run_weekly
+
+    def broken_storage(settings: Settings, **kwargs: Any) -> Any:
+        return original(settings, repository=BrokenRepository(), **kwargs)
+
+    monkeypatch.setattr(cli, "run_weekly", broken_storage)
+    result = CliRunner().invoke(app, ["weekly", "--mock", "--dry-run"])
+    assert result.exit_code == 4
+    assert "Storage error: start run" in result.output
