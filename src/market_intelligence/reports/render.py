@@ -154,7 +154,12 @@ def _source_refs(ctx: ReportContext) -> list[SourceRef]:
                 ),
             )
         )
+    cited = _cited_source_ids(ctx.draft)
     for index, item in enumerate(ctx.news):
+        # DECISION: all price and macro sources are listed; headlines only when cited, so
+        # the list shows what the report relies on. The total analysed is stated separately.
+        if news_source_id(index) not in cited:
+            continue
         refs.append(
             SourceRef(
                 number=len(refs) + 1,
@@ -167,6 +172,25 @@ def _source_refs(ctx: ReportContext) -> list[SourceRef]:
             )
         )
     return refs
+
+
+def _cited_source_ids(draft: ReportDraft | None) -> set[str]:
+    if draft is None:
+        return set()
+    claims: list[Claim] = [
+        *draft.summary,
+        *draft.global_markets,
+        *draft.macro,
+        *draft.sectors_and_companies,
+        *draft.warning_signs,
+        *draft.technology,
+        draft.scenarios.positive,
+        draft.scenarios.base,
+        draft.scenarios.negative,
+    ]
+    for cand in draft.research_candidates:
+        claims.extend([cand.thesis, *cand.counterarguments])
+    return {sid for claim in claims for sid in claim.source_ids}
 
 
 def _attempts_note(attempts: int) -> str:
@@ -216,6 +240,8 @@ def render_report(ctx: ReportContext) -> RenderedReport:
         if any(m.provenance.provider == "fred" for m in ctx.macro)
         else None,
         "data_issues": data_issues,
+        "news_total": len(ctx.news),
+        "news_cited": sum(1 for r in refs if r.source_id.startswith("news-")),
         "disclaimer": DISCLAIMER,
         "mock_banner": MOCK_BANNER,
     }

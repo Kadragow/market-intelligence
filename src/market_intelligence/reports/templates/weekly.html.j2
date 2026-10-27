@@ -132,6 +132,7 @@
   <li id="src-{{ r.number }}">{% if r.link %}<a href="{{ r.link }}">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %} — {{ r.details }}</li>
 {% endfor %}
 </ol>
+<p class="note">Przeanalizowane nagłówki: {{ news_total }}; cytowane w raporcie: {{ news_cited }}.</p>
 {% if fred_notice %}
 <p class="note">{{ fred_notice }}</p>
 {% endif %}

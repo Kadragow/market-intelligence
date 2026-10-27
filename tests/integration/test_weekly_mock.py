@@ -308,3 +308,11 @@ def test_fred_notice_shown_for_fred_data(
     notice = "This product uses the FRED® API but is not endorsed or certified"
     assert notice in md and notice in html
     assert "https://fred.stlouisfed.org/series/CPIAUCSL" in md
+
+
+def test_sources_list_only_cited_headlines(isolated_env: Path) -> None:
+    result = run_weekly(Settings(), mock=True, dry_run=True)
+    md = result.markdown_path.read_text(encoding="utf-8")
+    # The mock writer cites 4 of the 5 synthetic headlines (not the central bank one).
+    assert "Przeanalizowane nagłówki: 5; cytowane w raporcie: 4." in md
+    assert "Bank centralny pozostawia stopy bez zmian" not in md

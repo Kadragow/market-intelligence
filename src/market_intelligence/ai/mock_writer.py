@@ -51,7 +51,9 @@ def mock_draft(report_input: ReportInput) -> ReportDraft:
         key=lambda i: i.weekly_change_pct or 0.0,
         reverse=True,
     )
-    tech_news = [n for n in report_input.news if n.category in ("technology", "ai")]
+    tech_news = [
+        n for n in report_input.news if n.category in ("technology", "ai", "semiconductors")
+    ]
     other_news = [n for n in report_input.news if n not in tech_news]
 
     summary = [

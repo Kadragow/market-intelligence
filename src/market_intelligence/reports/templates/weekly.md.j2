@@ -99,6 +99,8 @@ _Brak danych kalendarza w tym etapie._
 {% for r in refs %}
 {{ r.number }}. {% if r.link %}[{{ r.label | md }}]({{ r.link }}){% else %}{{ r.label | md }}{% endif %} — {{ r.details }}
 {% endfor %}
+
+Przeanalizowane nagłówki: {{ news_total }}; cytowane w raporcie: {{ news_cited }}.
 {% if fred_notice %}
 
 _{{ fred_notice }}_
