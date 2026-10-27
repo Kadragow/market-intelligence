@@ -61,10 +61,11 @@ class FredMacroProvider:
     def get_series(
         self, series: MacroSeries, start: date, end: date, fetched_at: datetime
     ) -> MacroSeriesResult:
+        # Two requests per series; provenance reports the most attempts any of them needed.
         attempts = 0
         try:
             info_body, n = self._get("series", {"series_id": series.id})
-            attempts += n
+            attempts = max(attempts, n)
             obs_body, n = self._get(
                 "series/observations",
                 {
@@ -74,7 +75,7 @@ class FredMacroProvider:
                     "sort_order": "asc",
                 },
             )
-            attempts += n
+            attempts = max(attempts, n)
         except FredError as exc:
             logger.warning("FRED %s failed: %s", series.id, exc)
             return MacroSeriesResult([], error=str(exc), attempts=max(attempts, 1))

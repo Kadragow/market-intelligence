@@ -10,6 +10,7 @@ from market_intelligence.data.providers.base import MacroSeriesResult
 from market_intelligence.domain.models import (
     DataProvenance,
     DataStatus,
+    MacroFrequency,
     MacroObservation,
     MacroSeries,
     UtcDatetime,
@@ -51,7 +52,9 @@ def compute_macro_snapshot(
     if duplicates:
         issues.append(f"usunięto zduplikowane obserwacje: {duplicates}")
     missing = sum(1 for o in observations if o.value is None)
-    if missing:
+    # DECISION: daily series (e.g. DGS10) mark market holidays as missing; that is expected,
+    # so missing values are reported only for lower-frequency series.
+    if missing and series.frequency is not MacroFrequency.DAILY:
         issues.append(f"brakujące wartości w serii: {missing}")
     valid = [o for o in observations if o.value is not None]
 

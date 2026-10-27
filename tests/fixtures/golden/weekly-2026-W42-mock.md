@@ -74,7 +74,6 @@ _To nie są rekomendacje. To instrumenty, którym warto się dokładniej przyjrz
 - Złoto (GLD): OK — zduplikowana świeca z 2026-10-09 usunięta
 - USD/PLN: niewystarczające dane — brak danych testowych dla instrumentu
 - Rentowność US 10Y: nieaktualne — ostatnia obserwacja sprzed 11 dni roboczych
-- Rentowność obligacji 10-letnich (USA): OK — brakujące wartości w serii: 1
 - Stopa bezrobocia (USA): nieaktualne — ostatnia obserwacja sprzed 139 dni
 
 ## 7. Technologie, AI, półprzewodniki i startupy

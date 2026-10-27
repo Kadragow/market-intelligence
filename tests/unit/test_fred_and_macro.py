@@ -112,7 +112,7 @@ def test_fred_success_and_request_params() -> None:
     assert result.error is None
     assert result.info is not None and result.info.units == "Index 1982-1984=100"
     assert len(result.observations) == 2
-    assert result.attempts == 2
+    assert result.attempts == 1  # two requests, none retried
     series_req, obs_req = fred.requests
     assert series_req.url.path == "/fred/series"
     assert obs_req.url.path == "/fred/series/observations"
@@ -143,7 +143,7 @@ def test_fred_rate_limit_is_retried() -> None:
     fred = Fred((429, {}), (200, SERIES_BODY), (200, OBS_BODY))
     result = _fetch(fred)
     assert result.error is None
-    assert result.attempts == 3
+    assert result.attempts == 2  # the series request was retried once
 
 
 # --- macro snapshot ----------------------------------------------------------------
@@ -227,3 +227,11 @@ def test_fixture_macro_provider_reads_mock_data() -> None:
     assert any(o.value is None for o in results["DGS10"].observations)
     info = results["CPIAUCSL"].info
     assert info is not None and info.title.startswith("[TEST]")
+
+
+def test_daily_series_holidays_are_not_reported() -> None:
+    daily = MacroSeries(id="DGS10", name="10Y", frequency=MacroFrequency.DAILY, stale_after_days=7)
+    observations = [_obs(date(2026, 10, 22), 4.9), _obs(date(2026, 10, 23), None)]
+    snap = _snapshot(observations, daily)
+    assert snap.issues == []
+    assert snap.last_value == 4.9

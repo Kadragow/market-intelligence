@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import warnings
 
 import typer
 
@@ -29,6 +30,9 @@ def main(verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logg
     # Third-party request logs are noisy and may include full URLs.
     for name in ("httpx", "yfinance", "peewee"):
         logging.getLogger(name).setLevel(logging.WARNING)
+    # yfinance internals trigger pandas deprecation warnings that are not actionable here.
+    warnings.filterwarnings("ignore", category=DeprecationWarning, module="yfinance")
+    warnings.filterwarnings("ignore", category=FutureWarning, module="yfinance")
 
 
 @app.command()
