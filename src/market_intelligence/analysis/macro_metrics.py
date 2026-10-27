@@ -51,11 +51,12 @@ def compute_macro_snapshot(
     observations, duplicates = _dedupe(result.observations)
     if duplicates:
         issues.append(f"usunięto zduplikowane obserwacje: {duplicates}")
-    missing = sum(1 for o in observations if o.value is None)
+    daily = series.frequency is MacroFrequency.DAILY
+    missing = [o.observed_at.date().isoformat() for o in observations if o.value is None]
     # DECISION: daily series (e.g. DGS10) mark market holidays as missing; that is expected,
     # so missing values are reported only for lower-frequency series.
-    if missing and series.frequency is not MacroFrequency.DAILY:
-        issues.append(f"brakujące wartości w serii: {missing}")
+    if missing and not daily:
+        issues.append(f"brak wartości za okres: {', '.join(missing)}")
     valid = [o for o in observations if o.value is not None]
 
     info = result.info
@@ -73,7 +74,18 @@ def compute_macro_snapshot(
         return MacroSnapshot(status=DataStatus.INSUFFICIENT_DATA, issues=issues, **common)
 
     last = valid[-1]
-    previous = valid[-2] if len(valid) > 1 else None
+    # DECISION: for monthly/quarterly series "previous" is the immediately preceding period,
+    # never a value from further back skipped over a gap. Daily series skip holidays.
+    if daily:
+        previous = valid[-2] if len(valid) > 1 else None
+    else:
+        index = observations.index(last)
+        previous = observations[index - 1] if index > 0 else None
+        if previous is not None and previous.value is None:
+            issues.append(
+                f"brak wartości za poprzedni okres ({previous.observed_at.date().isoformat()}); "
+                "zmiana nie jest liczona"
+            )
     age_days = (as_of - last.observed_at.date()).days
     status = DataStatus.OK
     if age_days > series.stale_after_days:

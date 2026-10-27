@@ -188,7 +188,8 @@ def test_macro_missing_value_is_skipped_and_reported() -> None:
     snap = _snapshot(observations)
     assert snap.last_value == 102.0
     assert snap.last_period == datetime(2026, 8, 1, tzinfo=UTC)
-    assert "brakujące wartości w serii: 1" in snap.issues
+    assert "brak wartości za okres: 2026-09-01" in snap.issues
+    assert snap.previous_value == 101.0
 
 
 def test_macro_stale_series() -> None:
@@ -235,3 +236,16 @@ def test_daily_series_holidays_are_not_reported() -> None:
     snap = _snapshot(observations, daily)
     assert snap.issues == []
     assert snap.last_value == 4.9
+
+
+def test_previous_period_missing_is_not_bridged() -> None:
+    observations = [
+        _obs(date(2026, 7, 1), 100.0),
+        _obs(date(2026, 8, 1), None),
+        _obs(date(2026, 9, 1), 102.0),
+    ]
+    snap = _snapshot(observations)
+    assert snap.last_value == 102.0
+    assert snap.previous_value is None
+    assert snap.change is None
+    assert any("poprzedni okres (2026-08-01)" in i for i in snap.issues)
