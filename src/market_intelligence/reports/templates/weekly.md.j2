@@ -33,7 +33,17 @@ Zmiany liczone na cenach zamknięcia skorygowanych (jeśli dostępne), w walucie
 {{ claims(d.global_markets, "Brak komentarza do rynków.") }}
 ## 3. Najważniejsze wydarzenia makroekonomiczne
 
-{{ claims(d.macro, "Brak danych makroekonomicznych w tym etapie (FRED planowany w Etapie 2).") }}
+{% if macro_rows %}
+| Wskaźnik | Ostatnia wartość | Okres | Poprzednia | Zmiana | Zmiana r/r | Jednostka | Status danych |
+|---|---:|---|---:|---:|---:|---|---|
+{% for r in macro_rows %}
+| {{ r.snap.series.name | md }} | {{ r.last }} | {{ r.snap.last_period | date }} | {{ r.previous }} | {{ r.change }} | {{ r.snap.yoy_change_pct | pct }} | {{ (r.snap.units or "—") | md }} | {{ r.status }} |
+{% endfor %}
+
+Zmiana to różnica dwóch ostatnich obserwacji w jednostkach serii (dla stóp: punkty procentowe).
+
+{% endif %}
+{{ claims(d.macro, "Brak komentarza do danych makroekonomicznych.") }}
 ## 4. Analiza sektorów i spółek
 
 {{ claims(d.sectors_and_companies, "Brak danych do analizy sektorów i spółek.") }}
@@ -89,6 +99,10 @@ _Brak danych kalendarza w tym etapie._
 {% for r in refs %}
 {{ r.number }}. {% if r.link %}[{{ r.label | md }}]({{ r.link }}){% else %}{{ r.label | md }}{% endif %} — {{ r.details }}
 {% endfor %}
+{% if fred_notice %}
+
+_{{ fred_notice }}_
+{% endif %}
 {% if ctx.news_errors %}
 
 Nieudane pobrania wiadomości:

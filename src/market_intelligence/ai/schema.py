@@ -28,6 +28,23 @@ class InstrumentInput(BaseModel):
     data_issues: list[str] = []
 
 
+class MacroInput(BaseModel):
+    source_id: str
+    series_id: str
+    name: str
+    title: str | None
+    units: str | None
+    frequency: str
+    data_status: Literal["ok", "stale", "insufficient_data"]
+    last_value: float | None
+    last_period: str | None
+    previous_value: float | None
+    # last_value - previous_value in the series' units (percentage points for rates).
+    change: float | None
+    yoy_change_pct: float | None
+    data_issues: list[str] = []
+
+
 class NewsInput(BaseModel):
     source_id: str
     title: str
@@ -41,11 +58,16 @@ class ReportInput(BaseModel):
     report_week: str
     as_of_date: str
     instruments: list[InstrumentInput]
+    macro: list[MacroInput] = []
     news: list[NewsInput]
     unavailable_data: list[str]
 
     def source_ids(self) -> set[str]:
-        return {i.source_id for i in self.instruments} | {n.source_id for n in self.news}
+        return (
+            {i.source_id for i in self.instruments}
+            | {m.source_id for m in self.macro}
+            | {n.source_id for n in self.news}
+        )
 
 
 # --- Model output ---------------------------------------------------------------

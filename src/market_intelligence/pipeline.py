@@ -15,9 +15,21 @@ from market_intelligence.ai.mock_writer import mock_draft
 from market_intelligence.ai.schema import ReportInput
 from market_intelligence.ai.writer import DraftResult, build_report_input, generate_draft
 from market_intelligence.analysis.data_quality import select_news
+from market_intelligence.analysis.macro_metrics import MacroSnapshot, compute_macro_snapshot
 from market_intelligence.analysis.price_metrics import InstrumentSnapshot, compute_snapshot
-from market_intelligence.config import ConfigError, Settings, load_instruments, load_sources
-from market_intelligence.data.providers.base import NewsProvider, PriceProvider
+from market_intelligence.config import (
+    ConfigError,
+    Settings,
+    load_instruments,
+    load_macro_series,
+    load_sources,
+)
+from market_intelligence.data.providers.base import (
+    MacroProvider,
+    MacroSeriesResult,
+    NewsProvider,
+    PriceProvider,
+)
 from market_intelligence.delivery.email import (
     EmailError,
     EmailSender,
@@ -26,7 +38,12 @@ from market_intelligence.delivery.email import (
     decide_sending,
 )
 from market_intelligence.domain.models import DataProvenance, DataStatus
-from market_intelligence.mock_data import MOCK_PRICES_DIR, MOCK_RSS_DIR, MOCK_SOURCES_FILE
+from market_intelligence.mock_data import (
+    MOCK_FRED_DIR,
+    MOCK_PRICES_DIR,
+    MOCK_RSS_DIR,
+    MOCK_SOURCES_FILE,
+)
 from market_intelligence.reports.render import (
     ReportContext,
     render_report,
@@ -41,8 +58,7 @@ REPORT_TZ = ZoneInfo("Europe/Warsaw")
 # output is deterministic and matches the synthetic data, whatever today's date is.
 MOCK_NOW = datetime(2026, 10, 18, 16, 0, tzinfo=UTC)
 
-UNAVAILABLE_IN_STAGE_1 = [
-    "dane makroekonomiczne (FRED) — planowane w Etapie 2",
+UNAVAILABLE_DATA = [
     "dane fundamentalne spółek — planowane w Etapie 4",
     "kalendarz wydarzeń",
 ]
@@ -72,6 +88,7 @@ def run_weekly(
     now: datetime | None = None,
     price_provider: PriceProvider | None = None,
     news_provider: NewsProvider | None = None,
+    macro_provider: MacroProvider | None = None,
     llm: LLMClient | None = None,
     email_sender: EmailSender | None = None,
 ) -> WeeklyRunResult:
@@ -107,6 +124,8 @@ def run_weekly(
         logger.info("Prices %s: %s (%d bars)", instrument.id, snap.status.value, snap.bar_count)
         snapshots.append(snap)
 
+    macro = _fetch_macro(settings, mock, now, macro_provider)
+
     news_result = news_src.fetch(sources, now)
     news, duplicates = select_news(
         news_result.items,
@@ -123,13 +142,14 @@ def run_weekly(
         duplicates,
     )
 
-    unavailable = list(UNAVAILABLE_IN_STAGE_1)
+    unavailable = list(UNAVAILABLE_DATA)
     if not sources:
         unavailable.append("wiadomości — brak skonfigurowanych kanałów RSS (config/sources.yaml)")
 
     report_input = build_report_input(
         snapshots=snapshots,
         news=news,
+        macro=macro,
         report_week=report_week,
         as_of_date=now.date().isoformat(),
         unavailable_data=unavailable,
@@ -156,6 +176,7 @@ def run_weekly(
         news=news,
         news_errors=news_result.errors,
         unavailable_data=unavailable,
+        macro=macro,
         draft=draft.draft,
         errors=draft.errors,
     )
@@ -201,6 +222,59 @@ def run_weekly(
             result.send_reason = "delivery failed"
     logger.info("Delivery: %s", result.send_reason)
     return result
+
+
+def _fetch_macro(
+    settings: Settings, mock: bool, now: datetime, provider: MacroProvider | None
+) -> list[MacroSnapshot]:
+    series_list = load_macro_series(settings.config_dir / "macro.yaml")
+    if provider is None:
+        provider = _default_macro_provider(settings, mock)
+    # Start on the first day of the month so monthly observations are not cut off.
+    start = (now - timedelta(days=settings.macro_history_days)).date().replace(day=1)
+    snapshots: list[MacroSnapshot] = []
+    for series in series_list:
+        if provider is None:
+            # DECISION: a missing FRED key does not stop the report; macro is marked as
+            # insufficient data and no request is made.
+            result = MacroSeriesResult([], error="brak klucza FRED_API_KEY")
+            name, dataset = "fred", "not requested"
+        else:
+            result = provider.get_series(series, start, now.date(), now)
+            name, dataset = provider.name, provider.dataset
+        snap = compute_macro_snapshot(
+            series,
+            result,
+            provenance=DataProvenance(
+                provider=name,
+                dataset=dataset,
+                identifier=series.id,
+                fetched_at=now,
+                attempts=result.attempts,
+            ),
+            as_of=now.date(),
+        )
+        logger.info("Macro %s: %s", series.id, snap.status.value)
+        snapshots.append(snap)
+    return snapshots
+
+
+def _default_macro_provider(settings: Settings, mock: bool) -> MacroProvider | None:
+    if mock:
+        from market_intelligence.data.providers.fixtures import FixtureMacroProvider
+
+        return FixtureMacroProvider(MOCK_FRED_DIR)
+    key = settings.fred_api_key
+    if key is None or not key.get_secret_value():
+        logger.warning("FRED_API_KEY is not set; macro data will be marked as missing")
+        return None
+    from market_intelligence.data.providers.fred import FredMacroProvider
+
+    return FredMacroProvider(
+        api_key=key,
+        timeout_seconds=settings.http_timeout_seconds,
+        retry_policy=settings.retry_policy(),
+    )
 
 
 def _default_price_provider(settings: Settings, mock: bool) -> PriceProvider:

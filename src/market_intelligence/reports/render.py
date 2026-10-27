@@ -15,8 +15,10 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
 from market_intelligence.ai.schema import Claim, ReportDraft
-from market_intelligence.ai.writer import price_decimals
+from market_intelligence.ai.writer import macro_decimals, price_decimals
+from market_intelligence.analysis.macro_metrics import MacroSnapshot
 from market_intelligence.analysis.price_metrics import InstrumentSnapshot
+from market_intelligence.data.providers.fred import FRED_NOTICE
 from market_intelligence.domain.models import DataStatus, NewsItem
 
 DISCLAIMER = (
@@ -57,6 +59,7 @@ class ReportContext:
     news: list[NewsItem]
     news_errors: dict[str, str]
     unavailable_data: list[str]
+    macro: list[MacroSnapshot] = field(default_factory=list)
     draft: ReportDraft | None = None
     errors: list[str] = field(default_factory=list)
 
@@ -78,6 +81,12 @@ def fmt_pct(value: float | None) -> str:
     if value is None:
         return "brak danych"
     return f"{value:+.2f}".replace(".", ",") + "%"
+
+
+def fmt_signed(value: float | None, decimals: int = 2) -> str:
+    if value is None:
+        return "brak danych"
+    return f"{value:+.{decimals}f}".replace(".", ",")
 
 
 def fmt_dt(value: datetime | None) -> str:
@@ -127,6 +136,24 @@ def _source_refs(ctx: ReportContext) -> list[SourceRef]:
                 ),
             )
         )
+    for m in ctx.macro:
+        prov = m.provenance
+        refs.append(
+            SourceRef(
+                number=len(refs) + 1,
+                source_id=m.source_id,
+                label=f"Makro: {m.title or m.series.name} ({prov.provider}, {m.series.id})",
+                link=f"https://fred.stlouisfed.org/series/{m.series.id}"
+                if prov.provider == "fred"
+                else None,
+                details=(
+                    f"{prov.dataset}; pobrano {fmt_dt(prov.fetched_at)}"
+                    f"{_attempts_note(prov.attempts)}; "
+                    f"ostatni okres {fmt_date(m.last_period)}; "
+                    f"aktualizacja u dostawcy {fmt_dt(m.updated_at)}"
+                ),
+            )
+        )
     for item in ctx.news:
         refs.append(
             SourceRef(
@@ -158,6 +185,10 @@ def render_report(ctx: ReportContext) -> RenderedReport:
         (s.instrument.name, STATUS_LABELS[s.status], "; ".join(s.issues))
         for s in ctx.snapshots
         if s.status is not DataStatus.OK or s.issues
+    ] + [
+        (m.series.name, STATUS_LABELS[m.status], "; ".join(m.issues))
+        for m in ctx.macro
+        if m.status is not DataStatus.OK or m.issues
     ]
     template_ctx = {
         "ctx": ctx,
@@ -171,6 +202,19 @@ def render_report(ctx: ReportContext) -> RenderedReport:
             }
             for s in ctx.snapshots
         ],
+        "macro_rows": [
+            {
+                "snap": m,
+                "last": fmt_num(m.last_value, macro_decimals(m.units)),
+                "previous": fmt_num(m.previous_value, macro_decimals(m.units)),
+                "change": fmt_signed(m.change, macro_decimals(m.units)),
+                "status": STATUS_LABELS[m.status],
+            }
+            for m in ctx.macro
+        ],
+        "fred_notice": FRED_NOTICE
+        if any(m.provenance.provider == "fred" for m in ctx.macro)
+        else None,
         "data_issues": data_issues,
         "disclaimer": DISCLAIMER,
         "mock_banner": MOCK_BANNER,

@@ -31,10 +31,13 @@
 </ul>
 <h2>Stan pobranych danych</h2>
 <table>
-<thead><tr><th>Instrument</th><th>Status danych</th><th>Data obserwacji</th></tr></thead>
+<thead><tr><th>Instrument / wskaźnik</th><th>Status danych</th><th>Data obserwacji</th></tr></thead>
 <tbody>
 {% for r in rows %}
 <tr><td>{{ r.snap.instrument.name }}</td><td>{{ r.status }}</td><td>{{ r.snap.last_observed_at | date }}</td></tr>
+{% endfor %}
+{% for r in macro_rows %}
+<tr><td>{{ r.snap.series.name }}</td><td>{{ r.status }}</td><td>{{ r.snap.last_period | date }}</td></tr>
 {% endfor %}
 </tbody>
 </table>

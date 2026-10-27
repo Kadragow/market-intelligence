@@ -49,8 +49,9 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("FRED_API_KEY", "MI_FRED_API_KEY"),
     )
-    # Enough history for a year-over-year change of monthly series.
-    macro_history_days: int = Field(default=400, ge=60)
+    # DECISION: about 18 months, so the observation from the same month a year before the
+    # latest published one is included even when publication lags by several weeks.
+    macro_history_days: int = Field(default=550, ge=60)
 
     # --- LLM via OpenRouter ---
     openrouter_api_key: SecretStr | None = Field(
