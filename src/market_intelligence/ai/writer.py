@@ -13,6 +13,8 @@ from market_intelligence.ai.schema import (
     NewsInput,
     ReportDraft,
     ReportInput,
+    news_source_id,
+    report_draft_schema,
 )
 from market_intelligence.ai.validation import validate_draft
 from market_intelligence.analysis.macro_metrics import MacroSnapshot
@@ -49,14 +51,14 @@ def build_report_input(
         macro=[_macro_input(m) for m in macro or []],
         news=[
             NewsInput(
-                source_id=n.id,
+                source_id=news_source_id(i),
                 title=n.title,
                 source_name=n.source_name,
                 category=n.category,
                 published_date=n.published_at.date().isoformat() if n.published_at else None,
                 lead=n.summary,
             )
-            for n in news
+            for i, n in enumerate(news)
         ],
         unavailable_data=unavailable_data,
     )
@@ -120,6 +122,7 @@ def generate_draft(llm: LLMClient, report_input: ReportInput) -> DraftResult:
             system=SYSTEM_PROMPT,
             user=build_user_message(report_input),
             output_model=ReportDraft,
+            json_schema=report_draft_schema(sorted(report_input.source_ids())),
         )
     except LLMError as exc:
         logger.error("LLM call failed: %s", exc)

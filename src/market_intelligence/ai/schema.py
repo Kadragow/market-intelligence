@@ -6,7 +6,7 @@ carries source ids from the input; numbers are checked in ``validation.py``.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -110,3 +110,25 @@ class ReportDraft(_Strict):
     technology: list[Claim]
     scenarios: Scenarios
     limitations: list[str] = Field(min_length=1)
+
+
+def news_source_id(index: int) -> str:
+    """Short per-report id for the news item at ``index`` (0-based) in the model input.
+
+    DECISION: models copy short ids reliably but tend to mangle long hash-like ones
+    (observed: an invented "news-00123aefg654"), so the model sees news-01, news-02, ...
+    The stable NewsItem.id is kept for storage.
+    """
+    return f"news-{index + 1:02d}"
+
+
+def report_draft_schema(allowed_source_ids: list[str]) -> dict[str, Any]:
+    """JSON schema of ReportDraft with source ids restricted to the given values.
+
+    Providers that enforce strict structured outputs then cannot return unknown ids;
+    code-side validation still checks them for providers that treat the schema as a hint.
+    """
+    schema = ReportDraft.model_json_schema()
+    claim = schema["$defs"]["Claim"]["properties"]["source_ids"]
+    claim["items"] = {"type": "string", "enum": sorted(allowed_source_ids)}
+    return schema

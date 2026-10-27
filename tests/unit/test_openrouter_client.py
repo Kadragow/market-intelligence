@@ -109,6 +109,17 @@ def test_success_request_shape_and_response() -> None:
     assert "temperature" not in payload
 
 
+def test_custom_schema_is_sent_and_counted_in_cost() -> None:
+    rec = Recorder()
+    schema = {"type": "object", "properties": {"x": {"enum": ["a" * 5000]}}}
+    client = _client(rec)
+    small = client.estimate_max_cost("s", "u")
+    client.generate(system="s", user="u", output_model=ReportDraft, json_schema=schema)
+    assert rec.payload["response_format"]["json_schema"]["schema"] == schema
+    big = client.estimate_max_cost("s", "u" + json.dumps({"schema": schema}))
+    assert big > small
+
+
 def test_free_model_with_zero_prices_passes_cost_check() -> None:
     rec = Recorder()
     _generate(_client(rec, max_cost=0.01, prices=(0.0, 0.0), model="some/model:free"))

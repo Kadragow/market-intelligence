@@ -14,7 +14,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
-from market_intelligence.ai.schema import Claim, ReportDraft
+from market_intelligence.ai.schema import Claim, ReportDraft, news_source_id
 from market_intelligence.ai.writer import macro_decimals, price_decimals
 from market_intelligence.analysis.macro_metrics import MacroSnapshot
 from market_intelligence.analysis.price_metrics import InstrumentSnapshot
@@ -154,11 +154,11 @@ def _source_refs(ctx: ReportContext) -> list[SourceRef]:
                 ),
             )
         )
-    for item in ctx.news:
+    for index, item in enumerate(ctx.news):
         refs.append(
             SourceRef(
                 number=len(refs) + 1,
-                source_id=item.id,
+                source_id=news_source_id(index),
                 label=f"{item.source_name}: {item.title}",
                 link=item.link,
                 details=(

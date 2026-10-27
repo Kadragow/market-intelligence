@@ -93,7 +93,12 @@ class OpenRouterLLMClient:
         ) / 1_000_000
 
     def build_request(
-        self, *, system: str, user: str, output_model: type[BaseModel]
+        self,
+        *,
+        system: str,
+        user: str,
+        output_model: type[BaseModel],
+        json_schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
             "model": self._model,
@@ -107,7 +112,7 @@ class OpenRouterLLMClient:
                 "json_schema": {
                     "name": output_model.__name__,
                     "strict": True,
-                    "schema": output_model.model_json_schema(),
+                    "schema": json_schema or output_model.model_json_schema(),
                 },
             },
             "provider": {
@@ -120,8 +125,19 @@ class OpenRouterLLMClient:
             },
         }
 
-    def generate(self, *, system: str, user: str, output_model: type[BaseModel]) -> LLMResponse:
-        estimate = self.estimate_max_cost(system, user)
+    def generate(
+        self,
+        *,
+        system: str,
+        user: str,
+        output_model: type[BaseModel],
+        json_schema: dict[str, Any] | None = None,
+    ) -> LLMResponse:
+        payload = self.build_request(
+            system=system, user=user, output_model=output_model, json_schema=json_schema
+        )
+        # The schema is sent as input too, so it counts toward the cost estimate.
+        estimate = self.estimate_max_cost(system, user + json.dumps(payload["response_format"]))
         logger.info(
             "LLM pre-check: model=%s max cost estimate %.4f USD (limit %.2f)",
             self._model,
@@ -145,7 +161,7 @@ class OpenRouterLLMClient:
                     "Content-Type": "application/json",
                     "X-OpenRouter-Title": APP_TITLE,
                 },
-                json=self.build_request(system=system, user=user, output_model=output_model),
+                json=payload,
             ).response
         except httpx.TimeoutException as exc:
             raise LLMError("OpenRouter timeout") from exc
