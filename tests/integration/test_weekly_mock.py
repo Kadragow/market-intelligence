@@ -234,3 +234,85 @@ def test_cli_mock_dry_run(isolated_env: Path) -> None:
     assert result.exit_code == 0, result.output
     assert "weekly-2026-W42-mock.md" in result.output
     assert "dry-run" in result.output
+
+
+def _spy_input(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    from market_intelligence import pipeline
+
+    captured: dict[str, Any] = {}
+    original = pipeline.build_report_input
+
+    def spy(**kwargs: Any) -> Any:
+        captured["input"] = original(**kwargs)
+        return captured["input"]
+
+    monkeypatch.setattr(pipeline, "build_report_input", spy)
+    return captured
+
+
+def _mock_llm(captured: dict[str, Any]) -> FakeLLMClient:
+    from market_intelligence.ai.mock_writer import mock_draft
+
+    return FakeLLMClient(lambda s, u: mock_draft(captured["input"]).model_dump_json())
+
+
+def test_macro_reaches_model_input_and_report(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _spy_input(monkeypatch)
+    result = run_weekly(Settings(), mock=True, dry_run=True, llm=_mock_llm(captured))
+    assert result.report_ok, result.errors
+    macro = {m.series_id: m for m in captured["input"].macro}
+    assert set(macro) == {"CPIAUCSL", "FEDFUNDS", "DGS10", "UNRATE"}
+    assert macro["UNRATE"].data_status == "stale"
+    assert macro["CPIAUCSL"].yoy_change_pct is not None
+    md = result.markdown_path.read_text(encoding="utf-8")
+    assert "| Wskaźnik | Ostatnia wartość |" in md
+    assert "This product uses the FRED" not in md  # fixture data, not FRED
+
+
+def test_real_mode_without_fred_key_marks_macro_missing(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from market_intelligence.pipeline import MOCK_NOW
+
+    captured = _spy_input(monkeypatch)
+    result = run_weekly(
+        Settings(),
+        mock=False,
+        dry_run=True,
+        now=MOCK_NOW,
+        price_provider=FixturePriceProvider(MOCK_PRICES_DIR),
+        news_provider=FixtureNewsProvider(MOCK_RSS_DIR),
+        llm=_mock_llm(captured),
+    )
+    assert result.report_ok, result.errors
+    statuses = {m.data_status for m in captured["input"].macro}
+    assert statuses == {"insufficient_data"}
+    html = result.html_path.read_text(encoding="utf-8")
+    assert "brak klucza FRED_API_KEY" in html
+
+
+def test_fred_notice_shown_for_fred_data(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from market_intelligence.data.providers.fixtures import FixtureMacroProvider
+    from market_intelligence.mock_data import MOCK_FRED_DIR
+
+    class FredLike(FixtureMacroProvider):
+        name = "fred"
+
+    result = run_weekly(Settings(), mock=True, dry_run=True, macro_provider=FredLike(MOCK_FRED_DIR))
+    md = result.markdown_path.read_text(encoding="utf-8")
+    html = result.html_path.read_text(encoding="utf-8")
+    notice = "This product uses the FRED® API but is not endorsed or certified"
+    assert notice in md and notice in html
+    assert "https://fred.stlouisfed.org/series/CPIAUCSL" in md
+
+
+def test_sources_list_only_cited_headlines(isolated_env: Path) -> None:
+    result = run_weekly(Settings(), mock=True, dry_run=True)
+    md = result.markdown_path.read_text(encoding="utf-8")
+    # The mock writer cites 4 of the 5 synthetic headlines (not the central bank one).
+    assert "Przeanalizowane nagłówki: 5; cytowane w raporcie: 4." in md
+    assert "Bank centralny pozostawia stopy bez zmian" not in md

@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import csv
+import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from market_intelligence.data.providers.base import NewsFetchResult, PriceSeriesResult
-from market_intelligence.data.providers.rss_news import parse_feed
-from market_intelligence.domain.models import Instrument, NewsSource, PriceBar
+from market_intelligence.data.providers.base import (
+    MacroSeriesResult,
+    NewsFetchResult,
+    PriceSeriesResult,
+)
+from market_intelligence.data.providers.fred import parse_observations, parse_series_info
+from market_intelligence.data.providers.rss_news import newest_first, parse_feed
+from market_intelligence.domain.models import Instrument, MacroSeries, NewsSource, PriceBar
 
 
 class FixturePriceProvider:
@@ -16,6 +22,7 @@ class FixturePriceProvider:
     date,open,high,low,close,adj_close,volume (empty cell = missing)."""
 
     name = "fixture"
+    dataset = "synthetic daily CSV"
 
     def __init__(self, directory: Path) -> None:
         self._directory = directory
@@ -65,6 +72,31 @@ class FixtureNewsProvider:
             if not path.is_file():
                 result.errors[source.id] = "brak testowego kanału dla źródła"
                 continue
-            items = parse_feed(path.read_bytes(), source, fetched_at)
+            items = newest_first(parse_feed(path.read_bytes(), source, fetched_at))
             result.items.extend(items[: self._max_items])
         return result
+
+
+class FixtureMacroProvider:
+    """Reads ``<directory>/<series_id>.json`` holding FRED-shaped responses:
+    ``{"series": <fred/series body>, "observations": <fred/series/observations body>}``."""
+
+    name = "fixture"
+    dataset = "synthetic FRED-shaped JSON"
+
+    def __init__(self, directory: Path) -> None:
+        self._directory = directory
+
+    def get_series(
+        self, series: MacroSeries, start: date, end: date, fetched_at: datetime
+    ) -> MacroSeriesResult:
+        path = self._directory / f"{series.id}.json"
+        if not path.is_file():
+            return MacroSeriesResult([], error="brak danych testowych dla serii")
+        body = json.loads(path.read_text(encoding="utf-8"))
+        observations = [
+            o
+            for o in parse_observations(series.id, body.get("observations") or {})
+            if start <= o.observed_at.date() <= end
+        ]
+        return MacroSeriesResult(observations, info=parse_series_info(body.get("series") or {}))

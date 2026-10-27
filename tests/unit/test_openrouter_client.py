@@ -75,6 +75,7 @@ def _client(
         timeout_seconds=10,
         data_collection="allow",
         client=httpx.Client(transport=httpx.MockTransport(recorder)),
+        sleep=lambda seconds: None,
     )
 
 
@@ -106,6 +107,17 @@ def test_success_request_shape_and_response() -> None:
         "data_collection": "allow",
     }
     assert "temperature" not in payload
+
+
+def test_custom_schema_is_sent_and_counted_in_cost() -> None:
+    rec = Recorder()
+    schema = {"type": "object", "properties": {"x": {"enum": ["a" * 5000]}}}
+    client = _client(rec)
+    small = client.estimate_max_cost("s", "u")
+    client.generate(system="s", user="u", output_model=ReportDraft, json_schema=schema)
+    assert rec.payload["response_format"]["json_schema"]["schema"] == schema
+    big = client.estimate_max_cost("s", "u" + json.dumps({"schema": schema}))
+    assert big > small
 
 
 def test_free_model_with_zero_prices_passes_cost_check() -> None:
@@ -205,6 +217,7 @@ def test_non_json_error_body() -> None:
         timeout_seconds=10,
         data_collection="deny",
         client=httpx.Client(transport=httpx.MockTransport(handler)),
+        sleep=lambda seconds: None,
     )
     with pytest.raises(LLMError, match="HTTP 502"):
         _generate(client)
@@ -236,3 +249,55 @@ def test_long_error_message_is_truncated_to_one_line() -> None:
     assert "\n" not in text
     assert text.endswith("…")
     assert len(text) < 300
+
+
+class Sequence:
+    def __init__(self, *steps: tuple[int, Any] | Exception) -> None:
+        self.steps = list(steps)
+        self.calls = 0
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        step = self.steps[self.calls]
+        self.calls += 1
+        if isinstance(step, Exception):
+            raise step
+        return httpx.Response(step[0], json=step[1])
+
+
+def _seq_client(seq: Sequence) -> OpenRouterLLMClient:
+    return OpenRouterLLMClient(
+        api_key=SecretStr(API_KEY),
+        model="m",
+        max_tokens=1024,
+        max_cost_usd=1.0,
+        input_usd_per_mtok=1.0,
+        output_usd_per_mtok=1.0,
+        timeout_seconds=10,
+        data_collection="allow",
+        client=httpx.Client(transport=httpx.MockTransport(seq)),
+        sleep=lambda seconds: None,
+    )
+
+
+@pytest.mark.parametrize("status", [429, 503])
+def test_retries_rate_limit_and_no_provider(status: int) -> None:
+    seq = Sequence((status, {"error": {"code": status, "message": "x"}}), (200, _ok_body()))
+    assert ReportDraft.model_validate_json(_generate(_seq_client(seq)).text)
+    assert seq.calls == 2
+
+
+def test_retries_connection_error() -> None:
+    seq = Sequence(httpx.ConnectError("refused"), (200, _ok_body()))
+    _generate(_seq_client(seq))
+    assert seq.calls == 2
+
+
+@pytest.mark.parametrize(
+    "step",
+    [(502, {"error": {"code": 502, "message": "x"}}), httpx.ReadTimeout("slow")],
+)
+def test_does_not_retry_when_generation_may_have_run(step: tuple[int, Any] | Exception) -> None:
+    seq = Sequence(step, (200, _ok_body()))
+    with pytest.raises(LLMError):
+        _generate(_seq_client(seq))
+    assert seq.calls == 1

@@ -45,8 +45,16 @@ def test_repository_instruments_file_is_valid() -> None:
     assert instruments[0].symbol_for("yfinance") == "SPY"
 
 
-def test_repository_sources_file_is_valid_and_empty() -> None:
-    assert load_sources(ROOT / "config" / "sources.yaml") == []
+def test_repository_sources_file_is_valid() -> None:
+    sources = load_sources(ROOT / "config" / "sources.yaml")
+    assert {s.category for s in sources} <= {
+        "finance",
+        "macro",
+        "technology",
+        "ai",
+        "semiconductors",
+    }
+    assert all(s.url.startswith("https://") for s in sources)
 
 
 def test_duplicate_instrument_ids_rejected(tmp_path: Path) -> None:

@@ -1,0 +1,28 @@
+# Macro series from FRED (docs/SPEC.md §3). Titles and units are read from the FRED API;
+# `name` is the Polish label used in the report.
+#
+# stale_after_days: the series is marked stale when its latest observation period is
+# older than this (calendar days). Monthly series are published weeks after the period
+# ends, so their threshold is larger.
+# yoy: also compute the change versus the same period one year earlier (in %).
+series:
+  - id: CPIAUCSL
+    name: Inflacja CPI (USA, indeks)
+    frequency: monthly
+    stale_after_days: 75
+    yoy: true
+  - id: FEDFUNDS
+    name: Stopa funduszy federalnych (USA)
+    frequency: monthly
+    stale_after_days: 75
+    yoy: false
+  - id: DGS10
+    name: Rentowność obligacji 10-letnich (USA)
+    frequency: daily
+    stale_after_days: 7
+    yoy: false
+  - id: UNRATE
+    name: Stopa bezrobocia (USA)
+    frequency: monthly
+    stale_after_days: 75
+    yoy: false

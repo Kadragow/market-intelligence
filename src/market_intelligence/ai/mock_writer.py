@@ -9,6 +9,7 @@ from __future__ import annotations
 from market_intelligence.ai.schema import (
     Claim,
     InstrumentInput,
+    MacroInput,
     ReportDraft,
     ReportInput,
     ResearchCandidate,
@@ -29,6 +30,19 @@ def _describe(i: InstrumentInput) -> str:
     return f"{i.name}: " + (", ".join(parts) if parts else "brak wyliczonych zmian") + "."
 
 
+def _fmt(value: float) -> str:
+    return f"{value:g}".replace(".", ",")
+
+
+def _describe_macro(m: MacroInput) -> str:
+    if m.last_value is None:
+        return f"{m.name}: brak aktualnej wartości."
+    text = f"{m.name}: ostatnia wartość {_fmt(m.last_value)} ({m.last_period})"
+    if m.yoy_change_pct is not None:
+        text += f", zmiana rok do roku {_pct(m.yoy_change_pct)}"
+    return text + "."
+
+
 def mock_draft(report_input: ReportInput) -> ReportDraft:
     ok = [i for i in report_input.instruments if i.data_status == "ok"]
     bad = [i for i in report_input.instruments if i.data_status != "ok"]
@@ -37,7 +51,9 @@ def mock_draft(report_input: ReportInput) -> ReportDraft:
         key=lambda i: i.weekly_change_pct or 0.0,
         reverse=True,
     )
-    tech_news = [n for n in report_input.news if n.category in ("technology", "ai")]
+    tech_news = [
+        n for n in report_input.news if n.category in ("technology", "ai", "semiconductors")
+    ]
     other_news = [n for n in report_input.news if n not in tech_news]
 
     summary = [
@@ -50,12 +66,24 @@ def mock_draft(report_input: ReportInput) -> ReportDraft:
         )
     ]
     markets = [Claim(text=_describe(i), source_ids=[i.source_id]) for i in ok]
+    macro = [
+        Claim(text=_describe_macro(m), source_ids=[m.source_id])
+        for m in report_input.macro
+        if m.data_status == "ok"
+    ]
     warnings = [
         Claim(
             text=f"{i.name}: dane niekompletne lub nieaktualne, instrument pominięto w ocenie.",
             source_ids=[i.source_id],
         )
         for i in bad
+    ] + [
+        Claim(
+            text=f"{m.name}: dane makro niekompletne lub nieaktualne.",
+            source_ids=[m.source_id],
+        )
+        for m in report_input.macro
+        if m.data_status != "ok"
     ]
     sectors = [
         Claim(text=f"Nagłówek ({n.source_name}): {n.title}", source_ids=[n.source_id])
@@ -93,7 +121,7 @@ def mock_draft(report_input: ReportInput) -> ReportDraft:
     return ReportDraft(
         summary=summary,
         global_markets=markets,
-        macro=[],
+        macro=macro,
         sectors_and_companies=sectors,
         research_candidates=candidates,
         warning_signs=warnings,
@@ -105,6 +133,6 @@ def mock_draft(report_input: ReportInput) -> ReportDraft:
         ),
         limitations=[
             "Dane w tym raporcie są syntetyczne i służą wyłącznie do testów.",
-            "Brak danych makroekonomicznych i fundamentalnych w tym etapie.",
+            "Brak danych fundamentalnych w tym etapie.",
         ],
     )

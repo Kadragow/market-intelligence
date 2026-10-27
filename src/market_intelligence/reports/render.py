@@ -14,9 +14,11 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
-from market_intelligence.ai.schema import Claim, ReportDraft
-from market_intelligence.ai.writer import price_decimals
+from market_intelligence.ai.schema import Claim, ReportDraft, news_source_id
+from market_intelligence.ai.writer import macro_decimals, price_decimals
+from market_intelligence.analysis.macro_metrics import MacroSnapshot
 from market_intelligence.analysis.price_metrics import InstrumentSnapshot
+from market_intelligence.data.providers.fred import FRED_NOTICE
 from market_intelligence.domain.models import DataStatus, NewsItem
 
 DISCLAIMER = (
@@ -57,6 +59,7 @@ class ReportContext:
     news: list[NewsItem]
     news_errors: dict[str, str]
     unavailable_data: list[str]
+    macro: list[MacroSnapshot] = field(default_factory=list)
     draft: ReportDraft | None = None
     errors: list[str] = field(default_factory=list)
 
@@ -78,6 +81,12 @@ def fmt_pct(value: float | None) -> str:
     if value is None:
         return "brak danych"
     return f"{value:+.2f}".replace(".", ",") + "%"
+
+
+def fmt_signed(value: float | None, decimals: int = 2) -> str:
+    if value is None:
+        return "brak danych"
+    return f"{value:+.{decimals}f}".replace(".", ",")
 
 
 def fmt_dt(value: datetime | None) -> str:
@@ -112,24 +121,49 @@ def _environment() -> Environment:
 def _source_refs(ctx: ReportContext) -> list[SourceRef]:
     refs: list[SourceRef] = []
     for snap in ctx.snapshots:
-        symbol = snap.symbol or "brak symbolu"
+        prov = snap.provenance
+        symbol = prov.identifier or "brak symbolu"
         refs.append(
             SourceRef(
                 number=len(refs) + 1,
                 source_id=snap.source_id,
-                label=f"Ceny: {snap.instrument.name} ({snap.provider}, {symbol})",
+                label=f"Ceny: {snap.instrument.name} ({prov.provider}, {symbol})",
                 link=None,
                 details=(
-                    f"pobrano {fmt_dt(snap.fetched_at)}; "
+                    f"{prov.dataset}; pobrano {fmt_dt(prov.fetched_at)}"
+                    f"{_attempts_note(prov.attempts)}; "
                     f"ostatnia obserwacja {fmt_date(snap.last_observed_at)}"
                 ),
             )
         )
-    for item in ctx.news:
+    for m in ctx.macro:
+        prov = m.provenance
         refs.append(
             SourceRef(
                 number=len(refs) + 1,
-                source_id=item.id,
+                source_id=m.source_id,
+                label=f"Makro: {m.title or m.series.name} ({prov.provider}, {m.series.id})",
+                link=f"https://fred.stlouisfed.org/series/{m.series.id}"
+                if prov.provider == "fred"
+                else None,
+                details=(
+                    f"{prov.dataset}; pobrano {fmt_dt(prov.fetched_at)}"
+                    f"{_attempts_note(prov.attempts)}; "
+                    f"ostatni okres {fmt_date(m.last_period)}; "
+                    f"aktualizacja u dostawcy {fmt_dt(m.updated_at)}"
+                ),
+            )
+        )
+    cited = _cited_source_ids(ctx.draft)
+    for index, item in enumerate(ctx.news):
+        # DECISION: all price and macro sources are listed; headlines only when cited, so
+        # the list shows what the report relies on. The total analysed is stated separately.
+        if news_source_id(index) not in cited:
+            continue
+        refs.append(
+            SourceRef(
+                number=len(refs) + 1,
+                source_id=news_source_id(index),
                 label=f"{item.source_name}: {item.title}",
                 link=item.link,
                 details=(
@@ -138,6 +172,29 @@ def _source_refs(ctx: ReportContext) -> list[SourceRef]:
             )
         )
     return refs
+
+
+def _cited_source_ids(draft: ReportDraft | None) -> set[str]:
+    if draft is None:
+        return set()
+    claims: list[Claim] = [
+        *draft.summary,
+        *draft.global_markets,
+        *draft.macro,
+        *draft.sectors_and_companies,
+        *draft.warning_signs,
+        *draft.technology,
+        draft.scenarios.positive,
+        draft.scenarios.base,
+        draft.scenarios.negative,
+    ]
+    for cand in draft.research_candidates:
+        claims.extend([cand.thesis, *cand.counterarguments])
+    return {sid for claim in claims for sid in claim.source_ids}
+
+
+def _attempts_note(attempts: int) -> str:
+    return f" (próby: {attempts})" if attempts > 1 else ""
 
 
 def render_report(ctx: ReportContext) -> RenderedReport:
@@ -152,6 +209,10 @@ def render_report(ctx: ReportContext) -> RenderedReport:
         (s.instrument.name, STATUS_LABELS[s.status], "; ".join(s.issues))
         for s in ctx.snapshots
         if s.status is not DataStatus.OK or s.issues
+    ] + [
+        (m.series.name, STATUS_LABELS[m.status], "; ".join(m.issues))
+        for m in ctx.macro
+        if m.status is not DataStatus.OK or m.issues
     ]
     template_ctx = {
         "ctx": ctx,
@@ -165,7 +226,22 @@ def render_report(ctx: ReportContext) -> RenderedReport:
             }
             for s in ctx.snapshots
         ],
+        "macro_rows": [
+            {
+                "snap": m,
+                "last": fmt_num(m.last_value, macro_decimals(m.units)),
+                "previous": fmt_num(m.previous_value, macro_decimals(m.units)),
+                "change": fmt_signed(m.change, macro_decimals(m.units)),
+                "status": STATUS_LABELS[m.status],
+            }
+            for m in ctx.macro
+        ],
+        "fred_notice": FRED_NOTICE
+        if any(m.provenance.provider == "fred" for m in ctx.macro)
+        else None,
         "data_issues": data_issues,
+        "news_total": len(ctx.news),
+        "news_cited": sum(1 for r in refs if r.source_id.startswith("news-")),
         "disclaimer": DISCLAIMER,
         "mock_banner": MOCK_BANNER,
     }

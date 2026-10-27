@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel
 
@@ -27,8 +27,19 @@ class LLMResponse:
 
 
 class LLMClient(Protocol):
-    def generate(self, *, system: str, user: str, output_model: type[BaseModel]) -> LLMResponse:
-        """Return JSON text that is expected to match ``output_model``."""
+    def generate(
+        self,
+        *,
+        system: str,
+        user: str,
+        output_model: type[BaseModel],
+        json_schema: dict[str, Any] | None = None,
+    ) -> LLMResponse:
+        """Return JSON text that is expected to match ``output_model``.
+
+        ``json_schema`` overrides the schema derived from ``output_model`` (e.g. to
+        restrict allowed values for this request).
+        """
         ...
 
 
@@ -39,7 +50,16 @@ class FakeLLMClient:
         self._responder = responder
         self._model = model
         self.calls: list[tuple[str, str]] = []
+        self.schemas: list[dict[str, Any] | None] = []
 
-    def generate(self, *, system: str, user: str, output_model: type[BaseModel]) -> LLMResponse:
+    def generate(
+        self,
+        *,
+        system: str,
+        user: str,
+        output_model: type[BaseModel],
+        json_schema: dict[str, Any] | None = None,
+    ) -> LLMResponse:
         self.calls.append((system, user))
+        self.schemas.append(json_schema)
         return LLMResponse(text=self._responder(system, user), model=self._model)

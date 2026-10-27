@@ -9,7 +9,8 @@ import yaml
 from pydantic import AliasChoices, BaseModel, Field, SecretStr, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from market_intelligence.domain.models import Instrument, NewsSource
+from market_intelligence.data.http import RetryPolicy
+from market_intelligence.domain.models import Instrument, MacroSeries, NewsSource
 
 
 class ConfigError(Exception):
@@ -31,10 +32,26 @@ class Settings(BaseSettings):
     price_history_days: int = Field(default=90, ge=30)
     # DECISION: a series whose last bar is older than this many business days is STALE.
     stale_after_business_days: int = Field(default=5, ge=1)
+    # DECISION: more than this many consecutive missing business days is reported as a gap
+    # (single exchange holidays are normal).
+    price_max_gap_business_days: int = Field(default=3, ge=1)
     news_lookback_days: int = Field(default=7, ge=1)
     news_max_items_per_source: int = Field(default=20, ge=1)
     news_max_items_for_llm: int = Field(default=40, ge=1)
     http_timeout_seconds: float = Field(default=15.0, gt=0)
+    # Retries for data providers and the LLM API (exponential backoff with jitter).
+    http_max_attempts: int = Field(default=3, ge=1, le=10)
+    http_backoff_base_seconds: float = Field(default=1.0, ge=0)
+    http_backoff_max_seconds: float = Field(default=30.0, ge=0)
+
+    # --- Macro data (FRED) ---
+    fred_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("FRED_API_KEY", "MI_FRED_API_KEY"),
+    )
+    # DECISION: about 18 months, so the observation from the same month a year before the
+    # latest published one is included even when publication lags by several weeks.
+    macro_history_days: int = Field(default=550, ge=60)
 
     # --- LLM via OpenRouter ---
     openrouter_api_key: SecretStr | None = Field(
@@ -67,6 +84,13 @@ class Settings(BaseSettings):
     # Comma-separated list of recipients.
     email_to: str = ""
 
+    def retry_policy(self) -> RetryPolicy:
+        return RetryPolicy(
+            max_attempts=self.http_max_attempts,
+            base_delay_seconds=self.http_backoff_base_seconds,
+            max_delay_seconds=self.http_backoff_max_seconds,
+        )
+
     @property
     def email_recipients(self) -> list[str]:
         return [addr.strip() for addr in self.email_to.split(",") if addr.strip()]
@@ -90,6 +114,10 @@ class _InstrumentsFile(BaseModel):
     instruments: list[Instrument] = Field(min_length=1)
 
 
+class _MacroFile(BaseModel):
+    series: list[MacroSeries] = Field(default_factory=list)
+
+
 class _SourcesFile(BaseModel):
     feeds: list[NewsSource] | None = None
 
@@ -111,6 +139,18 @@ def load_instruments(path: Path) -> list[Instrument]:
     if duplicates:
         raise ConfigError(f"Duplicate instrument ids in {path}: {', '.join(duplicates)}")
     return parsed.instruments
+
+
+def load_macro_series(path: Path) -> list[MacroSeries]:
+    try:
+        parsed = _MacroFile.model_validate(_read_yaml(path) or {})
+    except ValidationError as exc:
+        raise ConfigError(f"Invalid macro file {path}: {exc}") from exc
+    ids = [s.id for s in parsed.series]
+    duplicates = sorted({i for i in ids if ids.count(i) > 1})
+    if duplicates:
+        raise ConfigError(f"Duplicate macro series ids in {path}: {', '.join(duplicates)}")
+    return parsed.series
 
 
 def load_sources(path: Path) -> list[NewsSource]:

@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Literal
 
 import numpy as np
 from pydantic import BaseModel
 
+from market_intelligence.analysis.data_quality import find_price_gaps
 from market_intelligence.data.providers.base import PriceSeriesResult, clean_bars
-from market_intelligence.domain.models import DataStatus, Instrument, PriceBar, UtcDatetime
+from market_intelligence.domain.models import (
+    DataProvenance,
+    DataStatus,
+    Instrument,
+    PriceBar,
+    UtcDatetime,
+)
 
 ReturnBasis = Literal["adj_close", "close"]
 
@@ -21,9 +28,7 @@ _MAX_REFERENCE_GAP_DAYS = 4
 class InstrumentSnapshot(BaseModel):
     instrument: Instrument
     source_id: str
-    provider: str
-    symbol: str | None
-    fetched_at: UtcDatetime
+    provenance: DataProvenance
     status: DataStatus
     last_close: float | None = None
     last_observed_at: UtcDatetime | None = None
@@ -42,10 +47,10 @@ def compute_snapshot(
     instrument: Instrument,
     result: PriceSeriesResult,
     *,
-    provider: str,
-    fetched_at: datetime,
+    provenance: DataProvenance,
     as_of: date,
     stale_after_business_days: int,
+    max_gap_business_days: int = 3,
 ) -> InstrumentSnapshot:
     issues = list(result.warnings)
     if result.error:
@@ -53,13 +58,12 @@ def compute_snapshot(
     bars, clean_warnings = clean_bars(result.bars, instrument.asset_class)
     issues.extend(clean_warnings)
     valid = [b for b in bars if b.close is not None]
+    issues.extend(find_price_gaps(valid, max_gap_business_days))
 
     common = {
         "instrument": instrument,
         "source_id": source_id_for_prices(instrument.id),
-        "provider": provider,
-        "symbol": result.symbol,
-        "fetched_at": fetched_at,
+        "provenance": provenance,
         "bar_count": len(valid),
     }
     if not valid:

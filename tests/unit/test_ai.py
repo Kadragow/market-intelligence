@@ -210,6 +210,40 @@ def test_generate_draft_with_fake_client() -> None:
     result = generate_draft(llm, _input())
     assert result.ok
     assert len(llm.calls) == 1
+    schema = llm.schemas[0]
+    assert schema is not None
+    allowed = schema["$defs"]["Claim"]["properties"]["source_ids"]["items"]["enum"]
+    assert allowed == sorted(_input().source_ids())
+
+
+def test_news_ids_in_model_input_are_short_and_match_render() -> None:
+    from datetime import UTC, datetime
+
+    from market_intelligence.ai.writer import build_report_input
+    from market_intelligence.domain.models import NewsItem
+
+    now = datetime(2026, 10, 27, tzinfo=UTC)
+    news = [
+        NewsItem(
+            id=NewsItem.make_id(f"https://e.com/{i}"),
+            title=f"T{i}",
+            link=f"https://e.com/{i}",
+            source_id="s",
+            source_name="S",
+            category="finance",
+            published_at=now,
+            fetched_at=now,
+        )
+        for i in range(3)
+    ]
+    report_input = build_report_input(
+        snapshots=[],
+        news=news,
+        report_week="2026-W44",
+        as_of_date="2026-10-27",
+        unavailable_data=[],
+    )
+    assert [n.source_id for n in report_input.news] == ["news-01", "news-02", "news-03"]
 
 
 def test_generate_draft_reports_invalid_model_output() -> None:

@@ -17,10 +17,13 @@ albo nie przeszła walidacji, więc nie jest publikowana.
 
 ## Stan pobranych danych
 
-| Instrument | Status danych | Data obserwacji |
+| Instrument / wskaźnik | Status danych | Data obserwacji |
 |---|---|---|
 {% for r in rows %}
 | {{ r.snap.instrument.name | md }} | {{ r.status }} | {{ r.snap.last_observed_at | date }} |
+{% endfor %}
+{% for r in macro_rows %}
+| {{ r.snap.series.name | md }} | {{ r.status }} | {{ r.snap.last_period | date }} |
 {% endfor %}
 
 Pobrane wiadomości: {{ ctx.news | length }}{% if ctx.news_errors %}; nieudane źródła: {{ ctx.news_errors | length }}{% endif %}.
