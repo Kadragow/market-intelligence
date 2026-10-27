@@ -40,15 +40,18 @@ wywołania LLM); pełny raport z LLM na kodzie z Etapu 2 nie był uruchamiany pr
 
 ## Etap 3 — baza danych
 
-- [ ] Interfejs repozytorium (implementacja SQLite → PostgreSQL)
-- [ ] Modele SQLAlchemy i migracje Alembic
-- [ ] Zapis cen, newsów, sygnałów, raportów, błędów
-- [ ] Niezmienne ID sygnałów i wersjonowanie reguł analitycznych
+- [x] Interfejs repozytorium (implementacja SQLite; kod przenośny na PostgreSQL)
+- [x] Modele SQLAlchemy i migracje Alembic
+- [x] Zapis cen, newsów, raportów, błędów (sygnały — Etap 4, decyzja operatora 2026-10-27)
+- [x] Niezmienne ID ocen (snapshoty, raporty) i wersjonowanie reguł analitycznych
+
+Status: ukończony 2026-10-27. Sprawdzony na SQLite (testy i CLI); PostgreSQL nieuruchamiany.
 
 ## Etap 4 — analityka inwestycyjna
 
 - [ ] Silnik techniczny (krótkoterminowy)
 - [ ] Interfejsy `FundamentalsProvider` i `FilingsProvider` (przeniesione z Etapu 2)
+- [ ] Tabela `signals` z niezmiennymi ID i wersją reguł (przeniesione z Etapu 3)
 - [ ] Silnik fundamentalny (długoterminowy) — wymaga wyboru dostawcy fundamentów
 - [ ] Silnik makro
 - [ ] Scoring z konfigurowalnymi wagami (`config/scoring.yaml`) i analiza ryzyka
@@ -172,3 +175,33 @@ _(agent dopisuje tu decyzje oznaczone `# DECISION:` i znane ograniczenia po każ
 - Deduplikacja wiadomości po tytule nie łapie parafraz tego samego wydarzenia.
 - Dane FRED mogą należeć do podmiotów trzecich; przed użyciem poza własnym (osobistym)
   użytkiem trzeba sprawdzić prawa do konkretnej serii (warunki FRED API).
+
+### Etap 3 — decyzje (`# DECISION:` w kodzie)
+
+- SQLAlchemy 2.1 + Alembic 1.20; domyślnie SQLite `data/market_intelligence.db`
+  (`MI_DATABASE_URL`). Sterownik PostgreSQL zostanie dodany przy przejściu (decyzja operatora).
+- Surowe ceny i obserwacje makro: upsert (najnowsze pobranie wygrywa); wiadomości: wstawiane
+  raz, bez nadpisywania.
+- Snapshoty instrumentów i makro, raporty, wysyłki i błędy: tylko dopisywanie, UUID nadawany
+  w kodzie; repozytorium nie ma metod zmiany ani usuwania. Wiersz `runs` to metadane cyklu
+  życia (status i czas zakończenia uzupełniane na końcu).
+- `RULES_VERSION` ręcznie podbijany (datowy, obecnie `2026.10.27`) + SHA-256 konfiguracji
+  (`instruments.yaml`, `macro.yaml`, `sources.yaml`, progi jakości danych) przy każdym
+  uruchomieniu i snapshocie.
+- Kolumna `UtcDateTime`: SQLite zwraca daty bez strefy (sprawdzone na SQLAlchemy 2.1.6), więc
+  zapisywany jest naiwny UTC i przy odczycie przywracany `tzinfo=UTC`; naiwne daty są odrzucane.
+- Migracje tylko jawnie (`mi db upgrade`). Nieaktualny schemat zatrzymuje `mi weekly` przed
+  pobieraniem danych (kod 2). Błąd bazy w trakcie uruchomienia nie zatrzymuje raportu ani
+  wysyłki; kończy się kodem 4 (decyzja operatora).
+- `--mock` zapisuje do bazy SQLite w pamięci.
+- Każde uruchomienie to nowe rekordy `runs`/`reports`, także dla tego samego tygodnia;
+  kontrola duplikatów wysyłki zostaje w Etapie 5.
+
+### Etap 3 — znane ograniczenia
+
+- PostgreSQL nie był uruchamiany; upserty używają dialektów `sqlite` i `postgresql`, inne bazy
+  nie są obsługiwane.
+- Niezmienność wymuszana w repozytorium, nie triggerami w bazie (ręczny SQL może ją złamać).
+- Brak retencji: baza rośnie z każdym uruchomieniem (pełny Markdown i HTML raportu w `reports`).
+- Brak tabeli serii makro (metadane serii są w snapshotach) i brak odczytu historii w raporcie —
+  baza jest na razie tylko zapisywana; odczyty dojdą wraz z backtestingiem i scoringiem.
