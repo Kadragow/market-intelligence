@@ -10,3 +10,4 @@ build/
 *.egg-info/
 /reports/
 .claude/settings.local.json
+/data/
