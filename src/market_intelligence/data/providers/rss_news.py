@@ -6,12 +6,14 @@ import calendar
 import html
 import logging
 import re
+import time
 from datetime import UTC, datetime
 from typing import Any
 
 import feedparser
 import httpx
 
+from market_intelligence.data.http import RetryPolicy, Sleep, request_with_retry
 from market_intelligence.data.providers.base import NewsFetchResult
 from market_intelligence.domain.models import NewsItem, NewsSource
 
@@ -31,6 +33,8 @@ class RssNewsProvider:
         timeout_seconds: float = 15.0,
         max_items_per_source: int = 20,
         client: httpx.Client | None = None,
+        retry_policy: RetryPolicy | None = None,
+        sleep: Sleep = time.sleep,
     ) -> None:
         self._client = client or httpx.Client(
             timeout=timeout_seconds,
@@ -38,12 +42,18 @@ class RssNewsProvider:
             headers={"User-Agent": _USER_AGENT},
         )
         self._max_items = max_items_per_source
+        self._policy = retry_policy or RetryPolicy()
+        self._sleep = sleep
 
     def fetch(self, sources: list[NewsSource], fetched_at: datetime) -> NewsFetchResult:
         result = NewsFetchResult(items=[])
         for source in sources:
             try:
-                response = self._client.get(source.url)
+                http_result = request_with_retry(
+                    self._client, "GET", source.url, policy=self._policy, sleep=self._sleep
+                )
+                result.attempts[source.id] = http_result.attempts
+                response = http_result.response
                 response.raise_for_status()
             except httpx.TimeoutException:
                 result.errors[source.id] = "przekroczony czas oczekiwania"
@@ -58,7 +68,7 @@ class RssNewsProvider:
                 logger.warning("RSS error for source %s: %s", source.id, type(exc).__name__)
                 continue
 
-            items = parse_feed(response.content, source, fetched_at)
+            items = newest_first(parse_feed(response.content, source, fetched_at))
             if not items:
                 result.errors[source.id] = "kanał nie zawierał poprawnych wpisów"
             result.items.extend(items[: self._max_items])
@@ -90,6 +100,12 @@ def parse_feed(content: bytes, source: NewsSource, fetched_at: datetime) -> list
             )
         )
     return items
+
+
+def newest_first(items: list[NewsItem]) -> list[NewsItem]:
+    """Sort by publication time, newest first; undated items go last."""
+    oldest = datetime.min.replace(tzinfo=UTC)
+    return sorted(items, key=lambda n: n.published_at or oldest, reverse=True)
 
 
 def _clean_text(value: object) -> str:

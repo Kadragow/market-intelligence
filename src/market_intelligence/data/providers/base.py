@@ -38,6 +38,7 @@ class PriceSeriesResult:
     symbol: str | None
     error: str | None = None
     warnings: list[str] = field(default_factory=list)
+    attempts: int = 1
 
 
 @dataclass
@@ -45,6 +46,8 @@ class NewsFetchResult:
     items: list[NewsItem]
     # source_id -> error message
     errors: dict[str, str] = field(default_factory=dict)
+    # source_id -> number of HTTP attempts
+    attempts: dict[str, int] = field(default_factory=dict)
 
 
 def clean_number(value: object, *, allow_non_positive: bool = False) -> float | None:

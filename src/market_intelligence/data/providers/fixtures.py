@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from market_intelligence.data.providers.base import NewsFetchResult, PriceSeriesResult
-from market_intelligence.data.providers.rss_news import parse_feed
+from market_intelligence.data.providers.rss_news import newest_first, parse_feed
 from market_intelligence.domain.models import Instrument, NewsSource, PriceBar
 
 
@@ -65,6 +65,6 @@ class FixtureNewsProvider:
             if not path.is_file():
                 result.errors[source.id] = "brak testowego kanału dla źródła"
                 continue
-            items = parse_feed(path.read_bytes(), source, fetched_at)
+            items = newest_first(parse_feed(path.read_bytes(), source, fetched_at))
             result.items.extend(items[: self._max_items])
         return result

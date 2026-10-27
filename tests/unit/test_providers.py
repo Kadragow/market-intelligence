@@ -134,7 +134,7 @@ def test_parse_feed_garbage_returns_empty() -> None:
 
 
 def _rss_provider(handler: httpx.MockTransport) -> RssNewsProvider:
-    return RssNewsProvider(client=httpx.Client(transport=handler))
+    return RssNewsProvider(client=httpx.Client(transport=handler), sleep=lambda seconds: None)
 
 
 def test_rss_provider_success() -> None:
@@ -165,3 +165,34 @@ def test_fixture_news_provider_reads_mock_feeds() -> None:
     result = FixtureNewsProvider(MOCK_RSS_DIR).fetch(sources, NOW)
     assert len(result.items) == 5
     assert result.errors == {}
+
+
+def test_rss_provider_retries_transient_errors() -> None:
+    body = (FIXTURES / "rss" / "sample.xml").read_bytes()
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(503) if calls["n"] == 1 else httpx.Response(200, content=body)
+
+    result = _rss_provider(httpx.MockTransport(handler)).fetch([SOURCE], NOW)
+    assert len(result.items) == 2
+    assert result.attempts == {"s1": 2}
+
+
+def test_rss_limit_keeps_newest_items() -> None:
+    items = [
+        f"<item><title>Wpis {d}</title><link>https://example.com/{d}</link>"
+        f"<pubDate>{d:02d} Oct 2026 10:00:00 GMT</pubDate></item>"
+        for d in (1, 20, 5, 25, 10)
+    ]
+    body = ("<rss version='2.0'><channel><title>t</title>" + "".join(items)).encode()
+    body += b"</channel></rss>"
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, content=body))
+    provider = RssNewsProvider(
+        client=httpx.Client(transport=transport),
+        max_items_per_source=2,
+        sleep=lambda seconds: None,
+    )
+    result = provider.fetch([SOURCE], NOW)
+    assert [i.title for i in result.items] == ["Wpis 25", "Wpis 20"]

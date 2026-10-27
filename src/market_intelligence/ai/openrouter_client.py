@@ -15,12 +15,15 @@ import json
 import logging
 import math
 import re
+import time
+from dataclasses import replace
 from typing import Any, Literal
 
 import httpx
 from pydantic import BaseModel, SecretStr
 
 from market_intelligence.ai.client import CostLimitExceededError, LLMError, LLMResponse
+from market_intelligence.data.http import RetryPolicy, Sleep, request_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +65,18 @@ class OpenRouterLLMClient:
         timeout_seconds: float,
         data_collection: DataCollection,
         client: httpx.Client | None = None,
+        retry_policy: RetryPolicy | None = None,
+        sleep: Sleep = time.sleep,
     ) -> None:
         self._api_key = api_key
+        # DECISION: retry only when no generation can have happened (rate limit, no
+        # provider available, connection never established), so nothing is billed twice.
+        self._policy = replace(
+            retry_policy or RetryPolicy(),
+            retry_statuses=frozenset({429, 503}),
+            retry_exceptions=(httpx.ConnectError, httpx.ConnectTimeout),
+        )
+        self._sleep = sleep
         self._client = client or httpx.Client(timeout=timeout_seconds)
         self._model = model
         self._max_tokens = max_tokens
@@ -121,15 +134,19 @@ class OpenRouterLLMClient:
             )
 
         try:
-            response = self._client.post(
+            response = request_with_retry(
+                self._client,
+                "POST",
                 OPENROUTER_CHAT_URL,
+                policy=self._policy,
+                sleep=self._sleep,
                 headers={
                     "Authorization": f"Bearer {self._api_key.get_secret_value()}",
                     "Content-Type": "application/json",
                     "X-OpenRouter-Title": APP_TITLE,
                 },
                 json=self.build_request(system=system, user=user, output_model=output_model),
-            )
+            ).response
         except httpx.TimeoutException as exc:
             raise LLMError("OpenRouter timeout") from exc
         except httpx.HTTPError as exc:

@@ -207,7 +207,9 @@ def _default_price_provider(settings: Settings, mock: bool) -> PriceProvider:
         return FixturePriceProvider(MOCK_PRICES_DIR)
     from market_intelligence.data.providers.yfinance_prices import YFinancePriceProvider
 
-    return YFinancePriceProvider(timeout_seconds=settings.http_timeout_seconds)
+    return YFinancePriceProvider(
+        timeout_seconds=settings.http_timeout_seconds, retry_policy=settings.retry_policy()
+    )
 
 
 def _default_news_provider(settings: Settings, mock: bool) -> NewsProvider:
@@ -220,6 +222,7 @@ def _default_news_provider(settings: Settings, mock: bool) -> NewsProvider:
     return RssNewsProvider(
         timeout_seconds=settings.http_timeout_seconds,
         max_items_per_source=settings.news_max_items_per_source,
+        retry_policy=settings.retry_policy(),
     )
 
 
@@ -239,6 +242,7 @@ def _default_llm(settings: Settings, mock: bool, report_input: ReportInput) -> L
         output_usd_per_mtok=settings.llm_output_usd_per_mtok,
         timeout_seconds=settings.llm_timeout_seconds,
         data_collection=settings.llm_data_collection,
+        retry_policy=settings.retry_policy(),
     )
 
 

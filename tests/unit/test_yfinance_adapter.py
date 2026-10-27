@@ -50,7 +50,7 @@ def test_session_date_is_kept_when_exchange_tz_is_ahead_of_utc(
         index=index,
     )
     calls = _install_fake_yfinance(monkeypatch, frame)
-    result = YFinancePriceProvider().get_daily_history(
+    result = YFinancePriceProvider(sleep=lambda seconds: None).get_daily_history(
         INSTRUMENT, date(2026, 10, 1), date(2026, 10, 16), NOW
     )
     assert calls[0]["symbol"] == "PLN=X"
@@ -64,7 +64,7 @@ def test_session_date_is_kept_when_exchange_tz_is_ahead_of_utc(
 
 def test_provider_error_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_yfinance(monkeypatch, RuntimeError("symbol not found"))
-    result = YFinancePriceProvider().get_daily_history(
+    result = YFinancePriceProvider(sleep=lambda seconds: None).get_daily_history(
         INSTRUMENT, date(2026, 10, 1), date(2026, 10, 16), NOW
     )
     assert result.bars == []
@@ -73,7 +73,7 @@ def test_provider_error_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_empty_frame_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_yfinance(monkeypatch, pd.DataFrame())
-    result = YFinancePriceProvider().get_daily_history(
+    result = YFinancePriceProvider(sleep=lambda seconds: None).get_daily_history(
         INSTRUMENT, date(2026, 10, 1), date(2026, 10, 16), NOW
     )
     assert result.error == "dostawca nie zwrócił danych"
@@ -81,7 +81,32 @@ def test_empty_frame_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_missing_symbol_for_provider() -> None:
     instrument = Instrument(id="X", name="X", asset_class=AssetClass.ETF)
-    result = YFinancePriceProvider().get_daily_history(
+    result = YFinancePriceProvider(sleep=lambda seconds: None).get_daily_history(
         instrument, date(2026, 10, 1), date(2026, 10, 16), NOW
     )
     assert result.error == "brak symbolu yfinance w konfiguracji"
+
+
+def test_transient_error_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    index = pd.DatetimeIndex(["2026-10-15"]).tz_localize("America/New_York")
+    frame = pd.DataFrame({"Close": [4.1], "Adj Close": [4.1]}, index=index)
+    calls = {"n": 0}
+
+    class FlakyTicker:
+        def __init__(self, symbol: str) -> None:
+            pass
+
+        def history(self, **kwargs: Any) -> Any:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise ConnectionError("reset")
+            return frame
+
+    module = types.ModuleType("yfinance")
+    module.Ticker = FlakyTicker  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "yfinance", module)
+    result = YFinancePriceProvider(sleep=lambda seconds: None).get_daily_history(
+        INSTRUMENT, date(2026, 10, 1), date(2026, 10, 16), NOW
+    )
+    assert result.error is None
+    assert result.attempts == 2

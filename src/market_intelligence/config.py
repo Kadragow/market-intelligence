@@ -9,6 +9,7 @@ import yaml
 from pydantic import AliasChoices, BaseModel, Field, SecretStr, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from market_intelligence.data.http import RetryPolicy
 from market_intelligence.domain.models import Instrument, NewsSource
 
 
@@ -35,6 +36,10 @@ class Settings(BaseSettings):
     news_max_items_per_source: int = Field(default=20, ge=1)
     news_max_items_for_llm: int = Field(default=40, ge=1)
     http_timeout_seconds: float = Field(default=15.0, gt=0)
+    # Retries for data providers and the LLM API (exponential backoff with jitter).
+    http_max_attempts: int = Field(default=3, ge=1, le=10)
+    http_backoff_base_seconds: float = Field(default=1.0, ge=0)
+    http_backoff_max_seconds: float = Field(default=30.0, ge=0)
 
     # --- LLM via OpenRouter ---
     openrouter_api_key: SecretStr | None = Field(
@@ -66,6 +71,13 @@ class Settings(BaseSettings):
     email_from: str | None = None
     # Comma-separated list of recipients.
     email_to: str = ""
+
+    def retry_policy(self) -> RetryPolicy:
+        return RetryPolicy(
+            max_attempts=self.http_max_attempts,
+            base_delay_seconds=self.http_backoff_base_seconds,
+            max_delay_seconds=self.http_backoff_max_seconds,
+        )
 
     @property
     def email_recipients(self) -> list[str]:
