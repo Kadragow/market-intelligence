@@ -28,6 +28,10 @@ and my approval.
 - Weekly report, real data, no e-mail: `uv run mi weekly --dry-run`
 - Weekly report with e-mail (also needs `MI_EMAIL_ENABLED=true` + full SMTP): `uv run mi weekly --send`
 - Regenerate golden report files: `UPDATE_GOLDEN=1 uv run pytest tests/integration`
+- Database migrations: `uv run mi db upgrade`; schema and recent runs: `uv run mi db status`
+- New migration after changing `storage/models.py`: autogenerate with Alembic
+  (`command.revision(..., autogenerate=True)` via `storage.db.alembic_config`), review it,
+  and keep `tests/unit/test_storage.py::test_models_match_migrations` green
 
 If a command above does not exist yet, create it in the stage that needs it and
 keep this section accurate.
@@ -44,7 +48,7 @@ src/market_intelligence/
   ai/                  LLM client (OpenRouter), prompts, schema, validation, report writer
   reports/             weekly report assembly, Markdown/HTML rendering, templates
   delivery/            e-mail
-  storage/             repository interfaces + implementations
+  storage/             repository interface, SQLAlchemy models + repository, Alembic migrations
   backtesting/         engine, metrics (Stage 6)
   mock_data/           synthetic prices/RSS used by `--mock`
   pipeline.py          weekly run: fetch -> compute -> LLM draft -> validate -> render -> send
@@ -69,6 +73,8 @@ Do not create empty modules "for later". Create a module when a stage needs it.
   Check current OpenRouter docs before changing the integration, do not rely on memory
   for API details or pricing.
 - Branches: `feat/stage-<n>-<topic>`, `fix/<topic>`, `chore/<topic>`.
+- Bump `RULES_VERSION` in `analysis/rules.py` when metric, status or data-quality logic
+  changes. Assessment tables (snapshots, reports, deliveries, errors) are append-only.
 - Commits: Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`),
   small and focused.
 

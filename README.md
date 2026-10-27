@@ -21,6 +21,7 @@ Specyfikacja: [docs/SPEC.md](docs/SPEC.md) · Plan etapów: [docs/ROADMAP.md](do
 ```bash
 uv python install 3.12   # jeśli nie masz Pythona 3.12
 uv sync
+uv run mi db upgrade     # tworzy/aktualizuje bazę (domyślnie data/market_intelligence.db)
 ```
 
 ## Szybki start (offline)
@@ -57,6 +58,7 @@ baner „DANE TESTOWE”. Dane testowe celowo zawierają przypadki brzegowe: bra
 | `MI_LLM_MAX_COST_USD` | `0.50` | Limit kosztu na uruchomienie. Przed wywołaniem liczony jest górny szacunek (wejście ≈ znaki / 3 + pełne `max_tokens`); po przekroczeniu wywołanie nie następuje. |
 | `MI_LLM_INPUT_USD_PER_MTOK` / `MI_LLM_OUTPUT_USD_PER_MTOK` | `2.0` / `10.0` | Maksymalna cena w USD za 1M tokenów. Służy do szacunku kosztu i jest wysyłana do OpenRouter jako `provider.max_price`, więc droższy dostawca nie zostanie użyty. Domyślnie stawki Sonnet 5.5 u Anthropic; sprawdź stronę modelu na openrouter.ai. Dla modeli `:free` ustaw `0` / `0`. |
 | `MI_LLM_DATA_COLLECTION` | `allow` | `allow` (domyślne w OpenRouter) albo `deny` — tylko dostawcy, którzy nie przechowują promptów (mniej modeli, darmowe mogą być niedostępne). |
+| `MI_DATABASE_URL` | `sqlite:///data/market_intelligence.db` | Baza danych (SQLAlchemy URL). PostgreSQL wymaga doinstalowania sterownika. |
 | `FRED_API_KEY` | — | Darmowy klucz z https://fred.stlouisfed.org/docs/api/api_key.html. Opcjonalny. |
 | `MI_HTTP_MAX_ATTEMPTS` | `3` | Liczba prób dla RSS, yfinance, FRED i OpenRouter (wykładniczy backoff z jitterem, `Retry-After` respektowany do `MI_HTTP_BACKOFF_MAX_SECONDS`). OpenRouter ponawiany tylko przy 429, 503 i błędach połączenia, żeby nie zapłacić dwa razy. |
 | `MI_EMAIL_ENABLED` | `false` | Jawna zgoda na wysyłkę e-maili. |
@@ -89,7 +91,31 @@ E-mail wychodzi **tylko** gdy jednocześnie: podano `--send` (domyślnie jest dr
 (błąd modelu, zły format, brak źródeł, liczby spoza danych) nigdy nie jest wysyłany.
 
 Kody wyjścia: `0` — sukces, `1` — raport nie przeszedł walidacji (zapisany jako
-`*-FAILED.{md,html}`), `2` — błąd konfiguracji, `3` — błąd wysyłki e-mail.
+`*-FAILED.{md,html}`), `2` — błąd konfiguracji (także nieaktualny schemat bazy),
+`3` — błąd wysyłki e-mail, `4` — błąd zapisu do bazy (raport i tak powstał i został wysłany).
+
+## Baza danych
+
+```bash
+uv run mi db upgrade   # migracje Alembic do najnowszej wersji
+uv run mi db status    # wersja schematu i ostatnie uruchomienia
+```
+
+Każde `mi weekly` zapisuje uruchomienie (tydzień, tryb, model, koszt LLM, wersja reguł
+i hash konfiguracji), surowe dane (ceny, obserwacje makro, metadane wiadomości),
+wyliczone snapshoty instrumentów i makro, raport (Markdown, HTML, zwalidowany szkic
+modelu), próby wysyłki i błędy.
+
+- Surowe dane są nadpisywane przy ponownym pobraniu (dostawcy korygują historię);
+  wiadomości zapisywane są raz, z datą pierwszego pobrania.
+- Snapshoty, raporty, wysyłki i błędy są **tylko dopisywane** — każde uruchomienie
+  dodaje nowe rekordy z niezmiennym UUID; nie ma operacji ich zmiany ani usuwania.
+- `RULES_VERSION` (`analysis/rules.py`) i hash konfiguracji pozwalają ustalić, jakimi
+  regułami powstał historyczny rekord. Wersję reguł podbija się ręcznie przy zmianie
+  logiki liczenia metryk.
+- `--mock` używa bazy w pamięci, więc dane testowe nie trafiają do prawdziwej bazy.
+- Wszystkie czasy w bazie są w UTC (SQLite nie przechowuje strefy czasowej, więc kod
+  zapisuje UTC i przy odczycie ją przywraca).
 
 ## Jak powstaje raport
 
@@ -137,7 +163,9 @@ UPDATE_GOLDEN=1 uv run pytest tests/integration   # odświeżenie golden files
   interpretacja prostych zmian cen przez model, nie rekomendacja.
 - yfinance rzuca różne wyjątki, więc ponawiany jest każdy; nieznany symbol też zużywa
   wszystkie próby.
-- Brak bazy danych i historii sygnałów (Etap 3); raporty to pliki w `reports/`.
+- Testowane tylko na SQLite. Kod jest przenośny, ale PostgreSQL wymaga sterownika
+  (`psycopg`) i nie był uruchamiany.
+- Niezmienność rekordów wymusza warstwa repozytorium, a nie triggery w bazie.
 - Brak kontroli duplikatów wysyłki: ponowne `--send` w tym samym tygodniu wyśle maila
   ponownie (Etap 5). Plik raportu jest nadpisywany.
 - Walidacja liczb jest heurystyczna (regex + tolerancja zaokrąglenia); małe liczby

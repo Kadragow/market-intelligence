@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     config_dir: Path = Path("config")
     reports_dir: Path = Path("reports")
+    # SQLAlchemy URL. SQLite by default; PostgreSQL needs a driver (not installed yet).
+    database_url: str = "sqlite:///data/market_intelligence.db"
 
     # --- Data ---
     price_history_days: int = Field(default=90, ge=30)
